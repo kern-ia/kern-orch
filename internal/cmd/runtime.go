@@ -159,9 +159,10 @@ func openStore(cfg config.Config) (*checkpoint.SQLiteStore, error) {
 }
 
 // checkpointHook persists the state after each level under runID, recording graphPath
-// so `resume` can reload the graph without the caller re-supplying it, and requester so
-// C6's write path knows who may steer this run (empty means anyone may).
-func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath, requester string) graph.StepFunc {
+// so `resume` can reload the graph without the caller re-supplying it, requester so
+// C6's write path knows who may steer this run (empty means anyone may), and dossier so
+// a consumer like kern-ui can group this run under a case (empty means none).
+func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath, requester, dossier string) graph.StepFunc {
 	return func(ctx context.Context, info graph.StepInfo, s *graph.State) error {
 		status := checkpoint.StatusRunning
 		if len(info.Frontier) == 0 {
@@ -169,7 +170,7 @@ func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath, requester s
 		}
 		return store.Save(ctx, checkpoint.Record{
 			RunID: runID, Step: info.Step, Frontier: info.Frontier, State: s,
-			Status: status, GraphPath: graphPath, Requester: requester,
+			Status: status, GraphPath: graphPath, Requester: requester, Dossier: dossier,
 		})
 	}
 }

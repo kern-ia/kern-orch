@@ -37,6 +37,7 @@ type preparedRun struct {
 	graphPath        string
 	name             string
 	requester        string
+	dossier          string
 	mailbox          *steer.Mailbox
 	reporter         *report.HTTPReporter
 	activity         *activityRelay
@@ -49,11 +50,12 @@ type preparedRun struct {
 // mailbox is C6's steer surface for this run — nil for the bare CLI's `run`/`resume`,
 // which has nothing live to answer an approval or a nudge through. A graph containing an
 // approval node refuses to load in that case (see wireApproval), rather than hang forever.
-func prepareRun(cfg config.Config, runID, graphPath, requester string, mailbox *steer.Mailbox) (*preparedRun, error) {
+func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, mailbox *steer.Mailbox) (*preparedRun, error) {
 	activity := &activityRelay{}
 	reporter := report.NewHTTP(cfg.StepReportURL)
 	reporter.Token = cfg.SinkToken
 	reporter.Requester = requester
+	reporter.Dossier = dossier
 
 	// Wired before the graph is built, not after: a subgraph node receives its hook at
 	// construction time.
@@ -74,7 +76,7 @@ func prepareRun(cfg config.Config, runID, graphPath, requester string, mailbox *
 	}
 
 	return &preparedRun{
-		graph: g, graphPath: graphPath, name: name, requester: requester, mailbox: mailbox,
+		graph: g, graphPath: graphPath, name: name, requester: requester, dossier: dossier, mailbox: mailbox,
 		reporter: reporter, activity: activity, activityReporter: activityReporter,
 	}, nil
 }
@@ -89,7 +91,7 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 
 	steps := &stepCounter{}
 	hook := multiStep(
-		checkpointHook(store, runID, p.graphPath, p.requester),
+		checkpointHook(store, runID, p.graphPath, p.requester, p.dossier),
 		steps.count,
 		p.reporter.Hook(runID, p.name, describeTopology(p.graphPath)),
 	)
@@ -170,7 +172,9 @@ func (d *daemonRunner) StartRun(ctx context.Context, graphPath, requester string
 	runCtx, cancel := context.WithCancel(context.Background())
 	mailbox := d.registerMailbox(runID, cancel)
 
-	prepared, err := prepareRun(d.cfg, runID, abs, requester, mailbox)
+	// StartRun has no dossier of its own — it is the CLI/status-only path (`run`,
+	// `resume`), never called with one; Dispatch is where a caller supplies a dossier.
+	prepared, err := prepareRun(d.cfg, runID, abs, requester, "", mailbox)
 	if err != nil {
 		cancel()
 		d.unregisterMailbox(runID)
@@ -217,7 +221,7 @@ func (d *daemonRunner) ResumeRun(ctx context.Context, runID string) error {
 	runCtx, cancel := context.WithCancel(context.Background())
 	mailbox := d.registerMailbox(runID, cancel)
 
-	prepared, err := prepareRun(d.cfg, runID, rec.GraphPath, rec.Requester, mailbox)
+	prepared, err := prepareRun(d.cfg, runID, rec.GraphPath, rec.Requester, rec.Dossier, mailbox)
 	if err != nil {
 		cancel()
 		d.unregisterMailbox(runID)
@@ -344,7 +348,7 @@ func parseDecision(s string) (graph.Decision, error) {
 // straight to the same invocation C5 already built; an agent skill launches a new
 // one-node run whose whole prompt is text — no template, nothing to configure, matching
 // what a skill actually carries today.
-func (d *daemonRunner) Dispatch(ctx context.Context, skillName, text, requester string) (daemon.DispatchResult, error) {
+func (d *daemonRunner) Dispatch(ctx context.Context, skillName, text, requester, dossier string) (daemon.DispatchResult, error) {
 	reg, err := skills.Load(d.cfg.SkillsDir)
 	if err != nil {
 		return daemon.DispatchResult{}, err
@@ -383,12 +387,12 @@ func (d *daemonRunner) Dispatch(ctx context.Context, skillName, text, requester 
 			// node's input via the existing nudge mechanism: OnBeforeLevel drains it
 			// into state before the first level runs, so no new plumbing is needed
 			// to get free text from the chat into a file-defined graph.
-			prepared, err = prepareRun(d.cfg, runID, sk.Graph, requester, mailbox)
+			prepared, err = prepareRun(d.cfg, runID, sk.Graph, requester, dossier, mailbox)
 			if err == nil {
 				mailbox.Nudge("message", text)
 			}
 		} else {
-			prepared, err = prepareAdhocRun(d.cfg, runID, skillName, text, requester, mailbox)
+			prepared, err = prepareAdhocRun(d.cfg, runID, skillName, text, requester, dossier, mailbox)
 		}
 		if err != nil {
 			cancel()
@@ -397,7 +401,7 @@ func (d *daemonRunner) Dispatch(ctx context.Context, skillName, text, requester 
 		}
 		if err := d.store.Save(ctx, checkpoint.Record{
 			RunID: runID, Step: checkpoint.QueuedStep, State: graph.NewState(),
-			Status: checkpoint.StatusQueued, Requester: requester,
+			Status: checkpoint.StatusQueued, Requester: requester, Dossier: dossier,
 		}); err != nil {
 			cancel()
 			d.unregisterMailbox(runID)
@@ -456,11 +460,12 @@ func skillNames(reg *skills.Registry) []string {
 // no YAML file, no template: text is the whole prompt. It shares every other seam with a
 // file-loaded run (same runner construction, same reporter/activity wiring); only how the
 // graph itself is built differs.
-func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester string, mailbox *steer.Mailbox) (*preparedRun, error) {
+func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dossier string, mailbox *steer.Mailbox) (*preparedRun, error) {
 	activity := &activityRelay{}
 	reporter := report.NewHTTP(cfg.StepReportURL)
 	reporter.Token = cfg.SinkToken
 	reporter.Requester = requester
+	reporter.Dossier = dossier
 	runner := newRunner(cfg, activity)
 
 	g := graph.NewGraph().SetEntry(skillName).AddNode(graph.NewAgentNode(skillName, prompt, runner))
@@ -475,7 +480,7 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester stri
 	}
 
 	return &preparedRun{
-		graph: g, graphPath: "", name: skillName, requester: requester, mailbox: mailbox,
+		graph: g, graphPath: "", name: skillName, requester: requester, dossier: dossier, mailbox: mailbox,
 		reporter: reporter, activity: activity, activityReporter: activityReporter,
 	}, nil
 }

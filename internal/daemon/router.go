@@ -91,8 +91,11 @@ type Runner interface {
 
 	// Dispatch resolves an explicit `/skill text…` chat command: a tool skill is invoked
 	// directly, an agent skill launches a new one-node run. Returns *UnknownSkillError
-	// when no skill of that name is loaded.
-	Dispatch(ctx context.Context, skill, text, requester string) (DispatchResult, error)
+	// when no skill of that name is loaded. dossier is a caller-supplied business label
+	// (e.g. a client case), distinct from requester (a caller identity, used for steering
+	// permission) — empty means the run belongs to no dossier, same as an empty requester
+	// leaves it open to any actor.
+	Dispatch(ctx context.Context, skill, text, requester, dossier string) (DispatchResult, error)
 
 	// Upload saves a document (filename plus its content) and returns the local path a
 	// caller then dispatches a skill with — the same "text IS the document path"
@@ -310,6 +313,7 @@ func (s *server) handleDispatch(w http.ResponseWriter, r *http.Request) {
 		Skill     string `json:"skill"`
 		Text      string `json:"text"`
 		Requester string `json:"requester"`
+		Dossier   string `json:"dossier"`
 	}
 	if err := decodeBody(r, &body); err != nil {
 		writeError(w, http.StatusBadRequest, "malformed body: want {\"skill\":\"...\",\"text\":\"...\"}")
@@ -320,7 +324,7 @@ func (s *server) handleDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.runner.Dispatch(r.Context(), body.Skill, body.Text, body.Requester)
+	result, err := s.runner.Dispatch(r.Context(), body.Skill, body.Text, body.Requester, body.Dossier)
 	var unknown *UnknownSkillError
 	switch {
 	case errors.As(err, &unknown):

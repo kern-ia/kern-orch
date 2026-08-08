@@ -71,7 +71,7 @@ func TestDaemonRunnerDispatchInvokesATool(t *testing.T) {
 	store := openDaemonStore(t, dir)
 	d := &daemonRunner{cfg: config.Config{SkillsDir: dir}, store: store}
 
-	result, err := d.Dispatch(context.Background(), "echo", "", "")
+	result, err := d.Dispatch(context.Background(), "echo", "", "", "")
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -81,14 +81,14 @@ func TestDaemonRunnerDispatchInvokesATool(t *testing.T) {
 }
 
 // The real proof dispatch's agent path works: a run genuinely launched, genuinely
-// completed, carrying the requester and the chat text as its whole prompt.
+// completed, carrying the requester, the dossier, and the chat text as its whole prompt.
 func TestDaemonRunnerDispatchLaunchesAnAgentRun(t *testing.T) {
 	dir := t.TempDir()
 	writeDispatchSkills(t, dir)
 	store := openDaemonStore(t, dir)
 	d := &daemonRunner{cfg: config.Config{SkillsDir: dir}, store: store}
 
-	result, err := d.Dispatch(context.Background(), "planner", "analyse ceci", "yoann")
+	result, err := d.Dispatch(context.Background(), "planner", "analyse ceci", "yoann", "AF-2288")
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -104,8 +104,33 @@ func TestDaemonRunnerDispatchLaunchesAnAgentRun(t *testing.T) {
 	if rec.Requester != "yoann" {
 		t.Errorf("Requester = %q, want yoann", rec.Requester)
 	}
+	if rec.Dossier != "AF-2288" {
+		t.Errorf("Dossier = %q, want AF-2288", rec.Dossier)
+	}
 	if v, _ := rec.State.Get("echo"); v != "analyse ceci" {
 		t.Errorf("stub did not receive the dispatched text as its prompt: %v", v)
+	}
+}
+
+// A dispatch with no dossier leaves the run's Dossier empty — no default is invented.
+func TestDaemonRunnerDispatchWithNoDossierLeavesItEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeDispatchSkills(t, dir)
+	store := openDaemonStore(t, dir)
+	d := &daemonRunner{cfg: config.Config{SkillsDir: dir}, store: store}
+
+	result, err := d.Dispatch(context.Background(), "planner", "analyse ceci", "yoann", "")
+	if err != nil {
+		t.Fatalf("Dispatch: %v", err)
+	}
+	waitForRun(t, store, result.RunID, checkpoint.StatusDone)
+
+	rec, ok, err := d.GetRun(context.Background(), result.RunID)
+	if err != nil || !ok {
+		t.Fatalf("GetRun: ok=%v err=%v", ok, err)
+	}
+	if rec.Dossier != "" {
+		t.Errorf("Dossier = %q, want empty", rec.Dossier)
 	}
 }
 
@@ -120,7 +145,7 @@ func TestDaemonRunnerDispatchWithAGraphLoadsTheFileAndNudgesTheMessage(t *testin
 	store := openDaemonStore(t, dir)
 	d := &daemonRunner{cfg: config.Config{SkillsDir: dir}, store: store}
 
-	result, err := d.Dispatch(context.Background(), "pipeline", "bonjour le CRM", "yoann")
+	result, err := d.Dispatch(context.Background(), "pipeline", "bonjour le CRM", "yoann", "")
 	if err != nil {
 		t.Fatalf("Dispatch: %v", err)
 	}
@@ -150,7 +175,7 @@ func TestDaemonRunnerDispatchOnAnUnknownSkillListsKnownNames(t *testing.T) {
 	store := openDaemonStore(t, dir)
 	d := &daemonRunner{cfg: config.Config{SkillsDir: dir}, store: store}
 
-	_, err := d.Dispatch(context.Background(), "jamais", "", "")
+	_, err := d.Dispatch(context.Background(), "jamais", "", "", "")
 	var unknown *daemon.UnknownSkillError
 	if !errors.As(err, &unknown) {
 		t.Fatalf("err = %v, want *daemon.UnknownSkillError", err)

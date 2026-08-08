@@ -47,6 +47,11 @@ type Record struct {
 	// which is what every CLI-started run is today. C6's write path (stop/nudge/decide)
 	// checks this against the caller before acting.
 	Requester string
+	// Dossier is a caller-supplied business label (e.g. a client case) grouping several
+	// runs together for a consumer like kern-ui's dossiers list. Distinct from Requester:
+	// one is an identity used for a permission check, the other a grouping key with no
+	// bearing on who may steer the run. Empty means the run belongs to no dossier.
+	Dossier string
 }
 
 // Summary is a per-run rollup for the `status` command.

@@ -80,7 +80,7 @@ type nudgeCall struct {
 
 type decideCall struct{ runID, nodeID, actor, decision string }
 
-type dispatchCall struct{ skill, text, requester string }
+type dispatchCall struct{ skill, text, requester, dossier string }
 
 func (f *fakeRunner) StartRun(_ context.Context, graphPath, requester string) (string, error) {
 	f.started = append(f.started, graphPath)
@@ -127,8 +127,8 @@ func (f *fakeRunner) Decide(_ context.Context, runID, nodeID, actor, decision st
 	}
 }
 
-func (f *fakeRunner) Dispatch(_ context.Context, skill, text, requester string) (DispatchResult, error) {
-	f.dispatched = append(f.dispatched, dispatchCall{skill, text, requester})
+func (f *fakeRunner) Dispatch(_ context.Context, skill, text, requester, dossier string) (DispatchResult, error) {
+	f.dispatched = append(f.dispatched, dispatchCall{skill, text, requester, dossier})
 	if f.dispatchUnknownSkill != nil {
 		return DispatchResult{}, f.dispatchUnknownSkill
 	}
