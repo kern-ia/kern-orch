@@ -139,6 +139,8 @@ sink needs no knowledge of kern-orch beyond the schema below. Today's consumer i
   "frontier": ["synthese", "critique"],
   "state": { "echo": "..." },
   "at": "2026-07-26T12:00:02Z",
+  "requester": "yoann",
+  "dossier": "AF-2288",
   "topology": {
     "entry": "greet",
     "nodes": [{ "id": "greet", "kind": "agent", "skill": "planner" }],
@@ -155,6 +157,8 @@ sink needs no knowledge of kern-orch beyond the schema below. Today's consumer i
 | `frontier` | string[] | yes | The nodes to execute **next**. An empty list means the run is over. |
 | `state` | object | no | Flat business data. Never a producer's internal envelope. |
 | `at` | RFC 3339 | yes | When the level completed. |
+| `requester` | string | no | Who asked for this run (C6). Empty means open — steerable by anyone. Sent **once**, on the run's first event, like `topology`. |
+| `dossier` | string | no | A caller-supplied business label (e.g. a client case) grouping several runs together for a consumer like kern-ui's dossiers list. Distinct from `requester` — an identity used for a steering-permission check, not a grouping key. Empty means the run belongs to no dossier. Sent **once**, on the run's first event. |
 | `topology` | object | no | The graph's shape. Sent **once**, on the run's first event. |
 | `topology.entry` | string | yes | Entry node id. Never appears in a frontier — it ran first. |
 | `topology.nodes[]` | object | yes | `id` and `kind` (`tool` / `agent` / `subgraph`), plus `skill` on an agent node. |

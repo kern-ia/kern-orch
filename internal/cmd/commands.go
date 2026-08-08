@@ -27,7 +27,7 @@ func newRunCmd() *cobra.Command {
 			// Fails fast on a bad path or a bad graph, before the store or a sink opens.
 			// No mailbox: the bare CLI has nothing live to steer through, so a graph
 			// with an approval node refuses to load here — see wireApproval.
-			prepared, err := prepareRun(cfg, runID, graphPath, "", nil)
+			prepared, err := prepareRun(cfg, runID, graphPath, "", "", nil)
 			if err != nil {
 				return err
 			}
@@ -89,9 +89,10 @@ func newResumeCmd() *cobra.Command {
 				return fmt.Errorf("run %q has no recorded graph path; pass it explicitly: resume %s <graph.yaml>", runID, runID)
 			}
 
-			// Requester carries over from the original run: resuming is not a new
-			// request, and the same actor who could steer it before still can.
-			prepared, err := prepareRun(cfg, runID, graphPath, rec.Requester, nil)
+			// Requester and dossier carry over from the original run: resuming is not a
+			// new request, and the same actor who could steer it before still can, still
+			// under the same case if it had one.
+			prepared, err := prepareRun(cfg, runID, graphPath, rec.Requester, rec.Dossier, nil)
 			if err != nil {
 				return err
 			}

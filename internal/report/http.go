@@ -116,6 +116,12 @@ type StepEvent struct {
 	// Requester names who asked for this run (C6); empty means open. Rides on the first
 	// event only, like Topology.
 	Requester string `json:"requester,omitempty"`
+
+	// Dossier is a caller-supplied business label (e.g. a client case) grouping several
+	// runs together for a consumer like kern-ui's dossiers list; empty means none. Rides
+	// on the first event only, like Requester and Topology — it never changes over a
+	// run's life.
+	Dossier string `json:"dossier,omitempty"`
 }
 
 // flatten extracts the business data of a state, leaving its internals behind.
@@ -149,6 +155,10 @@ type HTTPReporter struct {
 	// run with no requester at all. Rides on the first event only, the same way Topology
 	// does, and for the same reason: it never changes over a run's life.
 	Requester string
+
+	// Dossier is a caller-supplied business label; empty means none. Same "first event
+	// only" treatment as Requester, for the same reason.
+	Dossier string
 
 	// FlushTimeout caps how long Flush waits. Defaults to DefaultFlushTimeout.
 	FlushTimeout time.Duration
@@ -220,6 +230,7 @@ func (r *HTTPReporter) NestedHook(runID, graphName string, topo *Topology, paren
 		if !run.sent {
 			ev.Topology = run.pending
 			ev.Requester = r.Requester
+			ev.Dossier = r.Dossier
 			run.sent = true
 		}
 

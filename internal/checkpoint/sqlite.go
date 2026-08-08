@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 	created_at TEXT    NOT NULL,
 	graph_path TEXT    NOT NULL DEFAULT '',
 	requester  TEXT    NOT NULL DEFAULT '',
+	dossier    TEXT    NOT NULL DEFAULT '',
 	PRIMARY KEY (run_id, step)
 );`
 
@@ -54,6 +55,12 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("checkpoint: schema: %w", err)
 	}
+	// CREATE TABLE IF NOT EXISTS does nothing for a database that already existed before
+	// this column was added — no migration mechanism exists yet in this project's dev
+	// stage, so this one ALTER TABLE covers the gap. Errors are ignored: the only failure
+	// mode against this fixed schema is "column already exists" on every run after the
+	// first, which is not a fault.
+	_, _ = db.Exec(`ALTER TABLE checkpoints ADD COLUMN dossier TEXT NOT NULL DEFAULT ''`)
 	return &SQLiteStore{db: db}, nil
 }
 
@@ -75,13 +82,13 @@ func (s *SQLiteStore) Save(ctx context.Context, r Record) error {
 		created = time.Now().UTC()
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO checkpoints (run_id, step, frontier, state, status, created_at, graph_path, requester)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO checkpoints (run_id, step, frontier, state, status, created_at, graph_path, requester, dossier)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(run_id, step) DO UPDATE SET
 		   frontier=excluded.frontier, state=excluded.state,
 		   status=excluded.status, created_at=excluded.created_at, graph_path=excluded.graph_path,
-		   requester=excluded.requester`,
-		r.RunID, r.Step, string(frontier), string(state), r.Status, created.Format(time.RFC3339Nano), r.GraphPath, r.Requester)
+		   requester=excluded.requester, dossier=excluded.dossier`,
+		r.RunID, r.Step, string(frontier), string(state), r.Status, created.Format(time.RFC3339Nano), r.GraphPath, r.Requester, r.Dossier)
 	if err != nil {
 		return fmt.Errorf("checkpoint: save: %w", err)
 	}
@@ -91,14 +98,14 @@ func (s *SQLiteStore) Save(ctx context.Context, r Record) error {
 // Latest returns the highest-step checkpoint for runID; ok is false if none exists.
 func (s *SQLiteStore) Latest(ctx context.Context, runID string) (Record, bool, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT step, frontier, state, status, created_at, graph_path, requester
+		`SELECT step, frontier, state, status, created_at, graph_path, requester, dossier
 		 FROM checkpoints WHERE run_id = ? ORDER BY step DESC LIMIT 1`, runID)
 	var (
-		step                                 int
-		frontier, state                      string
-		status, createdStr, gpath, requester string
+		step                                          int
+		frontier, state                               string
+		status, createdStr, gpath, requester, dossier string
 	)
-	switch err := row.Scan(&step, &frontier, &state, &status, &createdStr, &gpath, &requester); err {
+	switch err := row.Scan(&step, &frontier, &state, &status, &createdStr, &gpath, &requester, &dossier); err {
 	case sql.ErrNoRows:
 		return Record{}, false, nil
 	case nil:
@@ -107,7 +114,7 @@ func (s *SQLiteStore) Latest(ctx context.Context, runID string) (Record, bool, e
 		return Record{}, false, fmt.Errorf("checkpoint: latest: %w", err)
 	}
 
-	rec := Record{RunID: runID, Step: step, Status: status, State: graph.NewState(), GraphPath: gpath, Requester: requester}
+	rec := Record{RunID: runID, Step: step, Status: status, State: graph.NewState(), GraphPath: gpath, Requester: requester, Dossier: dossier}
 	if err := json.Unmarshal([]byte(frontier), &rec.Frontier); err != nil {
 		return Record{}, false, fmt.Errorf("checkpoint: decode frontier: %w", err)
 	}
