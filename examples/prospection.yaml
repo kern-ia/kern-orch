@@ -1,0 +1,37 @@
+# Démo : pipeline de prospection CRM, piloté en langage naturel depuis le chat kern-ui
+# (POST /api/v1/dispatch {"skill":"prospection","text":"..."}).
+#
+# Le texte du chat devient state["message"] via le nudge que Dispatch envoie avant le
+# premier niveau (internal/cmd/serve.go, Dispatch/TypeAgent) — aucun prompt YAML statique
+# ne porte la vraie demande, chaque agent lit state["message"]/state["lead_context"]/
+# state["plan_propose"] selon son rôle (voir skills/prospection/agent_cli.py).
+#
+# secretaire (lecture CRM) -> commercial (propose un plan) -> confirm (validation humaine,
+# le panneau d'approbation de kern-ui affiche state["plan_propose"]) -> approved (l'agent
+# "expert" exécute le plan via le CRM) ou refused (rien n'est exécuté).
+#
+# "approved"/"refused" sont les noms exacts qu'attend le router onConfirmDecision déjà
+# câblé pour l'exemple steer.yaml — réutilisé tel quel, aucun changement Go.
+entry: secretaire
+nodes:
+  - id: secretaire
+    type: agent
+    prompt: Prépare une fiche lead à partir de la demande.
+  - id: commercial
+    type: agent
+    prompt: Prépare un plan d'action CRM à partir de la fiche lead.
+  - id: confirm
+    type: approval
+  - id: approved
+    type: agent
+    prompt: Exécute le plan d'action CRM validé.
+  - id: refused
+    type: tool
+    func: noop
+edges:
+  - from: secretaire
+    to: [commercial]
+  - from: commercial
+    to: [confirm]
+  - from: confirm
+    router: onConfirmDecision

@@ -1,0 +1,57 @@
+# community-management-agency-auto : variante de community-management-agency.yaml où la
+# publication part sans validation humaine — UNIQUEMENT sur un canal où ce projet a un
+# vrai connecteur d'envoi (Telegram, X ; voir skills/community-management-agency/agent_cli.py,
+# send_telegram/send_x). Sur tout autre canal (LinkedIn, Instagram, TikTok, email,
+# newsletter/blog), le comportement est identique au graphe standard : validation humaine
+# requise (confirm_publication).
+#
+# ⚠️ C'est un choix explicite, jamais le comportement par défaut : dispatché uniquement
+# via /community-management-agency-auto (jamais /community-management-agency), avec
+# l'avertissement porté par skills/community-management-agency-auto/SKILL.md, pas
+# découvert au moment de publier.
+#
+# Reprend le même stratège/rédacteur/publieur (même agent_cli.py, mêmes prompts) que
+# community-management-agency.yaml — seul le routage après redacteur change :
+# onAutoPublishRoute (internal/cmd/comm_auto.go) lit la ligne "Plateforme(s) :" du brief
+# du stratège et route soit vers auto_approve (canal réel connu → publieur direct), soit
+# vers confirm_publication (partout ailleurs, identique au graphe standard).
+entry: audience
+nodes:
+  - id: audience
+    type: agent
+    prompt: Prépare un brief d'audience à partir de la demande.
+  - id: strategiste
+    type: agent
+    prompt: Donne un avis sur la stratégie fournie, ou en propose une si aucune ne l'est.
+  - id: confirm_strategie
+    type: approval
+  - id: strategie_refusee
+    type: tool
+    func: noop
+  - id: redacteur
+    type: agent
+    prompt: Rédige le contenu final par plateforme à partir de la stratégie retenue.
+  - id: auto_approve
+    type: tool
+    func: autoApprove
+  - id: confirm_publication
+    type: approval
+  - id: publieur
+    type: agent
+    prompt: Publie ou envoie le contenu validé.
+  - id: refus_publication
+    type: tool
+    func: noop
+edges:
+  - from: audience
+    to: [strategiste]
+  - from: strategiste
+    router: onStrategyMode
+  - from: confirm_strategie
+    router: onStrategieDecision
+  - from: redacteur
+    router: onAutoPublishRoute
+  - from: auto_approve
+    to: [publieur]
+  - from: confirm_publication
+    router: onPublicationDecision

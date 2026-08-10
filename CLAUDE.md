@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> Conventions de développement (branches, commits, PR, lint, CI) : voir [`CONVENTIONS.md`](CONVENTIONS.md).
+
 ## Status
 
 Functional end-to-end. The harness is a **Go 1.26** module (`github.com/yoann/kern-orch`) using **Cobra** (CLI), **`modernc.org/sqlite`** (pure-Go, no cgo), and **`gopkg.in/yaml.v3`**. All six planned features are built and merged to `dev`: graph engine (`internal/graph`), agent runner (`internal/agentrunner`), checkpoint store + resume (`internal/checkpoint`), skills registry (`internal/skills`), YAML topology loader (`internal/topology`), config (`internal/config`), and the wired CLI (`internal/cmd`). `run`/`resume`/`status`/`list-skills` all work; see `examples/hello.yaml`. The design spec `harnais-agentique-CDC-v2.md` is in French; keep design discussion consistent with it.

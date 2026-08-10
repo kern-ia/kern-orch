@@ -1,0 +1,14 @@
+# courtage-banques : agent conversationnel interne, RAG critères banques partenaires
+# (besoin #4, specs.md). Dispatché librement — POST /api/v1/dispatch
+# {"skill":"courtage-banques","text":"Quelle banque accepte un prêt hypothécaire sur un
+# bien en SCI avec un emprunteur de 74 ans ?"} — le texte du chat EST la question (même
+# mécanisme "message" que community-management-agency/courtage-extraction).
+#
+# Pas rattaché à un dossier précis (contrairement à courtage-extraction) : un seul nœud,
+# aucune validation humaine — lecture seule, aucun effet externe réel, rien à approuver.
+entry: reponse
+nodes:
+  - id: reponse
+    type: agent
+    prompt: Interroge kern-memory sur les critères banques et synthétise une réponse sourcée.
+edges: []

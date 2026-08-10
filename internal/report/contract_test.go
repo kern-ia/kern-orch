@@ -107,6 +107,8 @@ func TestReporterEmitsTheV2Fixture(t *testing.T) {
 	s := newSink(t, http.StatusAccepted)
 	r := NewHTTP(s.server.URL)
 	r.now = func() time.Time { return time.Date(2026, 7, 26, 12, 0, 2, 0, time.UTC) }
+	r.Requester = "yoann"
+	r.Dossier = "AF-2288"
 
 	state := graph.NewState()
 	state.Set("echo", "...")

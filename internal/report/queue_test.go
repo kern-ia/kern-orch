@@ -3,6 +3,7 @@ package report
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -180,5 +181,68 @@ func TestActivityFlushGivesUpOnASinkThatNeverAnswers(t *testing.T) {
 
 	if waited := time.Since(start); waited > time.Second {
 		t.Errorf("Flush waited %s on a dead sink", waited)
+	}
+}
+
+// A protected sink refuses an anonymous producer. The token is configured once and travels
+// on every contract this brick emits — steps, catalogue and activity alike.
+func TestEveryReportCarriesTheConfiguredToken(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+
+	steps := NewHTTP(srv.URL)
+	steps.Token = "un-secret"
+	steps.now = fixedNow
+	_ = steps.Hook("r1", "g", nil)(context.Background(),
+		graph.StepInfo{Step: 1, Frontier: []string{"a"}}, stepState(t))
+	steps.Flush()
+
+	activity := NewActivityReporter(srv.URL)
+	activity.Token = "un-secret"
+	activity.now = fixedNow
+	activity.Report(context.Background(), "r1", "g", "n", true)
+	activity.Flush()
+
+	registry := NewRegistryPublisher(srv.URL)
+	registry.Token = "un-secret"
+	registry.now = fixedNow
+	_ = registry.Publish(context.Background(), nil)
+
+	if len(seen) != 3 {
+		t.Fatalf("the sink received %d requests, want one per contract", len(seen))
+	}
+	for i, header := range seen {
+		if header != "Bearer un-secret" {
+			t.Errorf("request %d sent %q, want the bearer token", i+1, header)
+		}
+	}
+}
+
+// No token configured means no header, not an empty one: an empty bearer is a credential
+// that says "I tried", and a sink should see nothing rather than something malformed.
+func TestNoTokenMeansNoHeader(t *testing.T) {
+	var header string
+	var seen bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header, seen = r.Header.Get("Authorization"), true
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+
+	r := NewHTTP(srv.URL)
+	r.now = fixedNow
+	_ = r.Hook("r1", "g", nil)(context.Background(),
+		graph.StepInfo{Step: 1, Frontier: []string{"a"}}, stepState(t))
+	r.Flush()
+
+	if !seen {
+		t.Fatal("nothing reached the sink")
+	}
+	if header != "" {
+		t.Errorf("Authorization = %q, want the header absent", header)
 	}
 }

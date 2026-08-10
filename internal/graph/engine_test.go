@@ -169,3 +169,77 @@ func TestALevelErrorStillReadsAsBefore(t *testing.T) {
 		t.Error("the underlying cause was lost")
 	}
 }
+
+// A nudge applies between levels, before the next one starts — this is the seam C6's
+// steering channel injects a live instruction through.
+func TestOnBeforeLevelAppliesBeforeEachLevel(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(appendNode("a")).AddNode(appendNode("b"))
+	g.SetEntry("a")
+	g.AddEdge("a", Static("b"))
+
+	var calls int
+	e := NewEngine(g).OnBeforeLevel(func(_ context.Context, s *State) error {
+		calls++
+		s.Set("nudge_seen_at_level", calls)
+		return nil
+	})
+
+	s := NewState()
+	if err := e.Run(context.Background(), s); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("OnBeforeLevel called %d times, want 2 (one per level)", calls)
+	}
+}
+
+// The hook's own state mutation must reach the nodes about to run, not just sit unused —
+// that is the entire point of a nudge.
+func TestOnBeforeLevelStateIsVisibleToTheNode(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(NewToolNode("read", func(_ context.Context, s *State) error {
+		v, _ := s.Get("nudge")
+		s.Set("saw", v)
+		return nil
+	}))
+	g.SetEntry("read")
+
+	e := NewEngine(g).OnBeforeLevel(func(_ context.Context, s *State) error {
+		s.Set("nudge", "hello")
+		return nil
+	})
+
+	s := NewState()
+	if err := e.Run(context.Background(), s); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if v, _ := s.Get("saw"); v != "hello" {
+		t.Fatalf("saw = %v, want hello", v)
+	}
+}
+
+// A hook that errors must abort the run rather than being swallowed silently.
+func TestOnBeforeLevelErrorAbortsTheRun(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(appendNode("a"))
+	g.SetEntry("a")
+
+	sentinel := errors.New("nudge source unreachable")
+	e := NewEngine(g).OnBeforeLevel(func(context.Context, *State) error { return sentinel })
+
+	if err := e.Run(context.Background(), NewState()); !errors.Is(err, sentinel) {
+		t.Fatalf("Run error = %v, want %v", err, sentinel)
+	}
+}
+
+// No hook registered must behave exactly as before — nil is a no-op, not a nil-pointer
+// panic waiting to happen.
+func TestOnBeforeLevelUnsetIsANoOp(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(appendNode("a"))
+	g.SetEntry("a")
+	if err := NewEngine(g).Run(context.Background(), NewState()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}

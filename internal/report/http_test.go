@@ -99,6 +99,56 @@ func TestHookPostsTheStepEvent(t *testing.T) {
 	}
 }
 
+func TestHookSendsRequesterOnlyOnTheFirstEvent(t *testing.T) {
+	s := newSink(t, http.StatusAccepted)
+	r := NewHTTP(s.server.URL + "/api/v1/steps")
+	r.now = fixedNow
+	r.Requester = "yoann"
+
+	hook := r.Hook("run-42", "review", nil)
+	_ = hook(context.Background(), graph.StepInfo{Step: 1, Frontier: []string{"a"}}, graph.NewState())
+	_ = hook(context.Background(), graph.StepInfo{Step: 2}, graph.NewState())
+	r.Flush()
+
+	s.mu.Lock()
+	bodies := s.bodies
+	s.mu.Unlock()
+	if len(bodies) != 2 {
+		t.Fatalf("got %d events, want 2", len(bodies))
+	}
+	if bodies[0]["requester"] != "yoann" {
+		t.Errorf("requester on first event = %v, want yoann", bodies[0]["requester"])
+	}
+	if bodies[1]["requester"] != nil {
+		t.Errorf("requester on second event = %v, want absent", bodies[1]["requester"])
+	}
+}
+
+func TestHookSendsDossierOnlyOnTheFirstEvent(t *testing.T) {
+	s := newSink(t, http.StatusAccepted)
+	r := NewHTTP(s.server.URL + "/api/v1/steps")
+	r.now = fixedNow
+	r.Dossier = "AF-2288"
+
+	hook := r.Hook("run-42", "review", nil)
+	_ = hook(context.Background(), graph.StepInfo{Step: 1, Frontier: []string{"a"}}, graph.NewState())
+	_ = hook(context.Background(), graph.StepInfo{Step: 2}, graph.NewState())
+	r.Flush()
+
+	s.mu.Lock()
+	bodies := s.bodies
+	s.mu.Unlock()
+	if len(bodies) != 2 {
+		t.Fatalf("got %d events, want 2", len(bodies))
+	}
+	if bodies[0]["dossier"] != "AF-2288" {
+		t.Errorf("dossier on first event = %v, want AF-2288", bodies[0]["dossier"])
+	}
+	if bodies[1]["dossier"] != nil {
+		t.Errorf("dossier on second event = %v, want absent", bodies[1]["dossier"])
+	}
+}
+
 func TestHookReportsAnEmptyFrontierSoTheSinkCanCloseTheRun(t *testing.T) {
 	s := newSink(t, http.StatusAccepted)
 	r := NewHTTP(s.server.URL)

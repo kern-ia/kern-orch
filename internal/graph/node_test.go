@@ -75,3 +75,47 @@ func TestAgentNodePropagatesRunnerError(t *testing.T) {
 		t.Fatalf("Execute error = %v; want %v", err, sentinel)
 	}
 }
+
+func TestApprovalNodeRecordsTheDecisionUnderItsOwnKey(t *testing.T) {
+	n := NewApprovalNode("confirm", func(_ context.Context, nodeID string) (Decision, error) {
+		if nodeID != "confirm" {
+			t.Errorf("wait called with nodeID = %q, want confirm", nodeID)
+		}
+		return Approved, nil
+	})
+	if n.Kind() != KindApproval {
+		t.Fatalf("Kind() = %v; want KindApproval", n.Kind())
+	}
+	s := NewState()
+	if err := n.Execute(context.Background(), s); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if v, _ := s.Get("decision:confirm"); v != "approve" {
+		t.Fatalf("decision:confirm = %v; want approve", v)
+	}
+}
+
+func TestApprovalNodeRecordsRefusal(t *testing.T) {
+	n := NewApprovalNode("confirm", func(context.Context, string) (Decision, error) {
+		return Refused, nil
+	})
+	s := NewState()
+	if err := n.Execute(context.Background(), s); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if v, _ := s.Get("decision:confirm"); v != "refuse" {
+		t.Fatalf("decision:confirm = %v; want refuse", v)
+	}
+}
+
+// A cancelled context (a stop request) must propagate as an error, not hang forever or
+// silently record a decision nobody made.
+func TestApprovalNodePropagatesWaitError(t *testing.T) {
+	sentinel := errors.New("stopped")
+	n := NewApprovalNode("confirm", func(context.Context, string) (Decision, error) {
+		return "", sentinel
+	})
+	if err := n.Execute(context.Background(), NewState()); !errors.Is(err, sentinel) {
+		t.Fatalf("Execute error = %v; want %v", err, sentinel)
+	}
+}

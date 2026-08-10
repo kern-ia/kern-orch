@@ -1,0 +1,28 @@
+package cmd
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/yoann/kern-orch/internal/agentrunner"
+	"github.com/yoann/kern-orch/internal/config"
+	"github.com/yoann/kern-orch/internal/graph"
+	"github.com/yoann/kern-orch/internal/topology"
+)
+
+func TestCourtageBanquesGraphLoadsAndValidates(t *testing.T) {
+	reg := builtinRegistry(&agentrunner.Stub{}, config.Config{})
+	reg.OnApproval(func(context.Context, string) (graph.Decision, error) {
+		return graph.Refused, nil
+	})
+
+	data, err := os.ReadFile("../../examples/courtage-banques.yaml")
+	if err != nil {
+		t.Fatalf("read graph: %v", err)
+	}
+
+	if _, err := topology.Load(data, reg); err != nil {
+		t.Fatalf("topology.Load: %v", err)
+	}
+}

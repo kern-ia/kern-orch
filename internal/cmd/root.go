@@ -17,7 +17,7 @@ func newRootCmd() *cobra.Command {
 			"external multi-provider CLI as a subprocess.",
 		SilenceUsage: true,
 	}
-	root.AddCommand(newRunCmd(), newResumeCmd(), newStatusCmd(), newListSkillsCmd(), newPublishSkillsCmd())
+	root.AddCommand(newRunCmd(), newResumeCmd(), newStatusCmd(), newListSkillsCmd(), newPublishSkillsCmd(), newServeCmd())
 	return root
 }
 

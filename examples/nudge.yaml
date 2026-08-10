@@ -1,0 +1,15 @@
+# Demonstrates C6's nudge: a value sent mid-run reaches the next level's state.
+# Run with: kern-orch serve, then POST /api/v1/runs, then
+#   POST /api/v1/runs/{id}/nudge {"key":"message","value":"bonjour"}
+# while the first node is still running (it sleeps briefly on purpose).
+entry: pause
+nodes:
+  - id: pause
+    type: tool
+    func: pause
+  - id: finish
+    type: tool
+    func: noop
+edges:
+  - from: pause
+    to: [finish]

@@ -21,6 +21,11 @@ type Registry struct {
 	// childStep builds the hook a nested run reports through. Wiring, like the runner:
 	// it decides how a node is built, not what the graph means.
 	childStep func(nodeID, graphRef string) graph.StepFunc
+
+	// approval is the wait function every approval node in this graph blocks on. Uniform
+	// across nodes (unlike childStep) because it is bound to one run's mailbox, not to a
+	// particular node's identity.
+	approval graph.ApprovalFunc
 }
 
 // NewRegistry creates a registry; runner may be nil if the graph has no agent nodes.
@@ -48,6 +53,14 @@ func (r *Registry) OnChildStep(build func(nodeID, graphRef string) graph.StepFun
 // Router registers a conditional routing function under name.
 func (r *Registry) Router(name string, fn graph.RouteFunc) *Registry {
 	r.routers[name] = fn
+	return r
+}
+
+// OnApproval sets the wait function every approval node in the loaded graph blocks on.
+// Unset, a graph with an approval node refuses to load (see build) rather than hang
+// forever with nothing configured to answer it.
+func (r *Registry) OnApproval(fn graph.ApprovalFunc) *Registry {
+	r.approval = fn
 	return r
 }
 
@@ -125,8 +138,13 @@ func build(data []byte, reg *Registry, resolveSub subResolver) (*graph.Graph, er
 				opts = append(opts, graph.WithChildStep(reg.childStep))
 			}
 			g.AddNode(graph.NewSubgraphNode(n.ID, sub, opts...))
+		case "approval":
+			if reg.approval == nil {
+				return nil, fmt.Errorf("topology: node %q is an approval but no decision source is configured", n.ID)
+			}
+			g.AddNode(graph.NewApprovalNode(n.ID, reg.approval))
 		default:
-			return nil, fmt.Errorf("topology: node %q: invalid type %q (want tool|agent|subgraph)", n.ID, n.Type)
+			return nil, fmt.Errorf("topology: node %q: invalid type %q (want tool|agent|subgraph|approval)", n.ID, n.Type)
 		}
 	}
 

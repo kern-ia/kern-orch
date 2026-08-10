@@ -1,0 +1,7 @@
+# Demonstrates C6's stop: blocks until the run's own context is cancelled.
+# Run with: kern-orch serve, then POST /api/v1/runs, then POST /api/v1/runs/{id}/stop
+entry: hold
+nodes:
+  - id: hold
+    type: tool
+    func: wait

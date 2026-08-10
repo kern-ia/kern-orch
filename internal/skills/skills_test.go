@@ -66,6 +66,62 @@ func TestLoadEmptyDirIsEmptyRegistry(t *testing.T) {
 	}
 }
 
+// A tool skill invoked by an outside caller (EPIC-03) needs a subprocess command and the
+// input it accepts declared alongside it — without this the catalogue names a tool but
+// nothing knows how to run it or what to send.
+func TestLoadParsesCommandAndParams(t *testing.T) {
+	dir := t.TempDir()
+	writeSkill(t, dir, "greeting", `---
+name: greeting
+type: tool
+description: greets someone
+command: ["python3", "tool.py"]
+params:
+  - name: name
+    type: string
+    required: true
+  - name: loud
+    type: bool
+---
+`)
+	reg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sk, ok := reg.Get("greeting")
+	if !ok {
+		t.Fatal("greeting not loaded")
+	}
+	if len(sk.Command) != 2 || sk.Command[0] != "python3" || sk.Command[1] != "tool.py" {
+		t.Fatalf("Command = %v", sk.Command)
+	}
+	if len(sk.Params) != 2 {
+		t.Fatalf("Params = %+v; want 2", sk.Params)
+	}
+	if sk.Params[0].Name != "name" || sk.Params[0].Type != "string" || !sk.Params[0].Required {
+		t.Errorf("Params[0] = %+v", sk.Params[0])
+	}
+	if sk.Params[1].Name != "loud" || sk.Params[1].Required {
+		t.Errorf("Params[1] = %+v, want optional", sk.Params[1])
+	}
+}
+
+// A skill with no declared command is simply not invocable this way — an agent-type skill,
+// or a tool backed only by a topology.Registry func — and that must not be an error: most
+// skills today have neither field.
+func TestLoadSkillWithNoCommandIsFine(t *testing.T) {
+	dir := t.TempDir()
+	writeSkill(t, dir, "sum", "---\nname: sum\ntype: tool\n---\n")
+	reg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sk, _ := reg.Get("sum")
+	if len(sk.Command) != 0 {
+		t.Errorf("Command = %v, want none", sk.Command)
+	}
+}
+
 func TestListIsSortedByName(t *testing.T) {
 	dir := t.TempDir()
 	writeSkill(t, dir, "zeta", "---\nname: zeta\ntype: tool\n---\n")

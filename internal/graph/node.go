@@ -12,6 +12,8 @@ const (
 	KindAgent
 	// KindSubgraph is a node that runs a nested graph (a sub-agent) with its own state.
 	KindSubgraph
+	// KindApproval is a node that blocks until a human decides, C6's steering channel.
+	KindApproval
 )
 
 // Node is a single unit of work in the graph. Execute mutates the shared state in
@@ -86,5 +88,50 @@ func (n *AgentNode) Execute(ctx context.Context, s *State) error {
 	for k, v := range res.Output {
 		s.Set(k, v)
 	}
+	return nil
+}
+
+// Decision is a human's answer to an ApprovalNode.
+type Decision string
+
+const (
+	Approved Decision = "approve"
+	Refused  Decision = "refuse"
+)
+
+// ApprovalFunc blocks until a human decides nodeID's fate, or ctx is cancelled (a stop
+// request). It is the port an ApprovalNode reaches out through — the same shape as
+// AgentRunner: the graph package depends on the abstraction, never on how a decision
+// actually arrives.
+type ApprovalFunc func(ctx context.Context, nodeID string) (Decision, error)
+
+// ApprovalNode blocks the level it belongs to until a human decides. This is not a new
+// concurrency primitive: runLevel already runs every node in the frontier in its own
+// goroutine and waits for the slowest one, exactly what an agent call already does when a
+// model is slow to answer. The decision is recorded under its own state key so a graph
+// author routes on it with an ordinary conditional router — no new routing concept either.
+type ApprovalNode struct {
+	id   string
+	wait ApprovalFunc
+}
+
+// NewApprovalNode builds an approval node bound to a wait function.
+func NewApprovalNode(id string, wait ApprovalFunc) *ApprovalNode {
+	return &ApprovalNode{id: id, wait: wait}
+}
+
+func (n *ApprovalNode) ID() string { return n.id }
+func (n *ApprovalNode) Kind() Kind { return KindApproval }
+
+// DecisionKey is the state key an ApprovalNode's decision is recorded under — exported so
+// a router function can read it without hardcoding the "decision:" prefix.
+func DecisionKey(nodeID string) string { return "decision:" + nodeID }
+
+func (n *ApprovalNode) Execute(ctx context.Context, s *State) error {
+	d, err := n.wait(ctx, n.id)
+	if err != nil {
+		return err
+	}
+	s.Set(DecisionKey(n.id), string(d))
 	return nil
 }

@@ -67,10 +67,18 @@ const defaultMaxSteps = 10_000
 // step runs the current frontier of nodes in parallel (each on a cloned state), merges
 // their outputs back in a stable order, then computes the next frontier from their routes.
 type Engine struct {
-	g        *Graph
-	maxSteps int
-	onStep   StepFunc
+	g           *Graph
+	maxSteps    int
+	onStep      StepFunc
+	beforeLevel NudgeFunc
 }
+
+// NudgeFunc is called before each level starts, with the chance to mutate the shared
+// state a run is about to execute with — the seam C6's steering channel injects a live
+// instruction through. It is safe by construction, not by locking: the previous level's
+// goroutines have all returned via wg.Wait() and the next level's have not started, so
+// nothing else touches State while this runs.
+type NudgeFunc func(ctx context.Context, s *State) error
 
 // StepInfo describes the graph's position after a level completes: the next frontier
 // to execute (empty when the run is finished) and the running step count.
@@ -101,6 +109,12 @@ func (e *Engine) OnStep(f StepFunc) *Engine {
 	return e
 }
 
+// OnBeforeLevel registers a hook invoked before each level (see NudgeFunc).
+func (e *Engine) OnBeforeLevel(f NudgeFunc) *Engine {
+	e.beforeLevel = f
+	return e
+}
+
 // Run executes the graph from its entry node, mutating s in place.
 func (e *Engine) Run(ctx context.Context, s *State) error {
 	return e.RunFrom(ctx, s, []string{e.g.entry})
@@ -119,6 +133,11 @@ func (e *Engine) RunFrom(ctx context.Context, s *State, frontier []string) error
 		}
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if e.beforeLevel != nil {
+			if err := e.beforeLevel(ctx, s); err != nil {
+				return err
+			}
 		}
 		next, err := e.runLevel(ctx, s, frontier)
 		if err != nil {

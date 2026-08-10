@@ -8,13 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/yoann/kern-orch/internal/agentrunner"
 	"github.com/yoann/kern-orch/internal/checkpoint"
 	"github.com/yoann/kern-orch/internal/config"
 	"github.com/yoann/kern-orch/internal/graph"
+	"github.com/yoann/kern-orch/internal/notify"
 	"github.com/yoann/kern-orch/internal/report"
 	"github.com/yoann/kern-orch/internal/skills"
+	"github.com/yoann/kern-orch/internal/steer"
 	"github.com/yoann/kern-orch/internal/topology"
 )
 
@@ -48,7 +51,7 @@ func newRunner(cfg config.Config, activity *activityRelay) graph.AgentRunner {
 
 // builtinRegistry wires the built-in tool/router functions available to every graph.
 // Projects extend this set in Go; the YAML topology references entries by name.
-func builtinRegistry(runner graph.AgentRunner) *topology.Registry {
+func builtinRegistry(runner graph.AgentRunner, cfg config.Config) *topology.Registry {
 	reg := topology.NewRegistry(runner)
 	reg.Tool("noop", func(context.Context, *graph.State) error { return nil })
 	// double: demo tool for the subgraph example — multiplies state key "n" by 2.
@@ -71,6 +74,77 @@ func builtinRegistry(runner graph.AgentRunner) *topology.Registry {
 		s.Freeze(nil)
 		return nil
 	})
+	// announce: demo tool for the notify example — sets state key "message" to a fixed
+	// demo string, standing in for what an agent's own output would set.
+	reg.Tool("announce", func(_ context.Context, s *graph.State) error {
+		s.Set("message", "Test kern-orch : le nœud notify a bien envoyé ce message.")
+		return nil
+	})
+	// notify: an agent's own outbound channel to a human — sends state key "message" to
+	// Telegram. Unconfigured (no KERN_TELEGRAM_BOT_TOKEN/KERN_TELEGRAM_CHAT_ID) fails
+	// the node rather than dropping the message silently.
+	var notifyClient *notify.Client
+	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
+		notifyClient = notify.New(cfg.TelegramBotToken, cfg.TelegramChatID)
+	}
+	reg.Tool("notify", notify.Tool(notifyClient))
+	// wait: demo tool for C6 — blocks until the run's own context is cancelled, proving
+	// stop actually interrupts a live node rather than just refusing new work.
+	reg.Tool("wait", func(ctx context.Context, _ *graph.State) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	// pause: demo tool for C6 — sleeps briefly so a nudge sent while it runs has time to
+	// land before the next level starts.
+	reg.Tool("pause", func(ctx context.Context, _ *graph.State) error {
+		select {
+		case <-time.After(150 * time.Millisecond):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	})
+	// onConfirmDecision: demo router for the C6 approval example — reads the decision an
+	// approval node named "confirm" recorded and picks the matching branch.
+	reg.Router("onConfirmDecision", func(s *graph.State) []string {
+		if v, _ := s.Get(graph.DecisionKey("confirm")); v == string(graph.Approved) {
+			return []string{"approved"}
+		}
+		return []string{"refused"}
+	})
+	// community-management-agency routers (internal/cmd/comm_routers.go): onStrategyMode
+	// after the strategiste node, and one decisionRouter per approval gate — this graph
+	// has two, so it cannot reuse onConfirmDecision above (hardcoded to a single node
+	// named "confirm").
+	reg.Router("onStrategyMode", onStrategyMode)
+	reg.Router("onStrategieDecision", decisionRouter("confirm_strategie",
+		[]string{"redacteur"}, []string{"strategie_refusee"}))
+	reg.Router("onPublicationDecision", decisionRouter("confirm_publication",
+		[]string{"publieur"}, []string{"refus_publication"}))
+	// community-management-agency-auto (internal/cmd/comm_auto.go) — a separate graph,
+	// additive to the one above. See that file for the routing rule.
+	reg.Router("onAutoPublishRoute", onAutoPublishRoute)
+	reg.Tool("autoApprove", autoApproveTool)
+	// courtage-extraction (internal/cmd/courtage_anon.go) — kern-anon wired in as a real
+	// Go dependency (go.mod replace github.com/YoLaub/PresidioGo => ../Kern-Anon). Masking
+	// happens before any interpretive model sees the text; demasking after, via a token
+	// map rather than Presidio's own position-based Deanonymize (see that file's doc).
+	reg.Tool("anonymizePII", anonymizePII)
+	reg.Tool("deanonymizePII", deanonymizePII)
+	reg.Router("onExtractionDecision", decisionRouter("confirm_extraction",
+		[]string{"extraction_validee"}, []string{"extraction_a_corriger"}))
+	// courtage-extraction besoin #2 (mémorandum) — chained onto the same graph/state as
+	// besoin #1 (user's choice: "un seul flux dossier -> mémo"), own masking pass so it
+	// never clobbers besoin #1's own state keys. See internal/cmd/courtage_anon.go.
+	reg.Tool("anonymizeMemoInput", anonymizeMemoInput)
+	reg.Tool("deanonymizeMemoOutput", deanonymizeMemoOutput)
+	reg.Router("onMemoDecision", decisionRouter("confirm_memo",
+		[]string{"memo_valide"}, []string{"memo_a_corriger"}))
+	// courtage-extraction besoin #3 (relances pièces manquantes, specs.md) — notifies the
+	// internal team (existing "notify" tool above, same fixed Telegram destination), never
+	// the client directly (no client->chat_id model exists, and Telegram cannot message a
+	// user who hasn't messaged the bot first — see docs/index for the cadrage decision).
+	reg.Router("onRelanceNeeded", onRelanceNeeded)
 	return reg
 }
 
@@ -85,8 +159,10 @@ func openStore(cfg config.Config) (*checkpoint.SQLiteStore, error) {
 }
 
 // checkpointHook persists the state after each level under runID, recording graphPath
-// so `resume` can reload the graph without the caller re-supplying it.
-func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath string) graph.StepFunc {
+// so `resume` can reload the graph without the caller re-supplying it, requester so
+// C6's write path knows who may steer this run (empty means anyone may), and dossier so
+// a consumer like kern-ui can group this run under a case (empty means none).
+func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath, requester, dossier string) graph.StepFunc {
 	return func(ctx context.Context, info graph.StepInfo, s *graph.State) error {
 		status := checkpoint.StatusRunning
 		if len(info.Frontier) == 0 {
@@ -94,7 +170,7 @@ func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath string) grap
 		}
 		return store.Save(ctx, checkpoint.Record{
 			RunID: runID, Step: info.Step, Frontier: info.Frontier, State: s,
-			Status: status, GraphPath: graphPath,
+			Status: status, GraphPath: graphPath, Requester: requester, Dossier: dossier,
 		})
 	}
 }
@@ -169,6 +245,7 @@ func (c *stepCounter) count(_ context.Context, info graph.StepInfo, _ *graph.Sta
 // The caller gets the error only so it can say something useful; it must not propagate it.
 func publishRegistry(ctx context.Context, cfg config.Config, dir string) error {
 	pub := report.NewRegistryPublisher(cfg.RegistryReportURL)
+	pub.Token = cfg.SinkToken
 	if !pub.Enabled() {
 		return nil
 	}
@@ -204,5 +281,27 @@ func nestedRuns(reg *topology.Registry, reporter *report.HTTPReporter, parentRun
 	reg.OnChildStep(func(nodeID, graphRef string) graph.StepFunc {
 		return reporter.NestedHook(newRunID(), graphName(graphRef), describeTopology(graphRef),
 			&report.Parent{RunID: parentRun, NodeID: nodeID})
+	})
+}
+
+// wireApproval binds a run's mailbox as the decision source for every approval node in
+// its graph. A nil mailbox — the bare CLI's `run`/`resume`, which has no live steer
+// surface — leaves approval nodes unconfigured, and the loader refuses to build such a
+// graph rather than let it hang forever with nothing to answer it.
+//
+// The wait is bracketed through the same activity relay an agent node already uses
+// (report.ActivityReporter, C10): without it, a run parked on an approval node reports
+// nothing at all until a level completes — which never happens until someone decides it —
+// so kern-ui would have no way to show a human the very decision they are meant to make.
+// A pending approval is exactly the kind of "something is happening" the beacon already
+// knows how to say.
+func wireApproval(reg *topology.Registry, mailbox *steer.Mailbox, activity *activityRelay) {
+	if mailbox == nil {
+		return
+	}
+	reg.OnApproval(func(ctx context.Context, nodeID string) (graph.Decision, error) {
+		activity.call(nodeID, true)
+		defer activity.call(nodeID, false)
+		return mailbox.AwaitDecision(ctx, nodeID)
 	})
 }

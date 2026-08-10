@@ -109,3 +109,61 @@ func TestSaveRejectsEmptyRunID(t *testing.T) {
 		t.Fatalf("err = %v; want ErrEmptyRunID", err)
 	}
 }
+
+// A daemon writes a queued marker the instant a run is accepted, before the engine has
+// produced its first checkpoint. It must be visible immediately, and must stop being the
+// answer the moment a real checkpoint exists.
+func TestAQueuedMarkerYieldsToTheFirstRealCheckpoint(t *testing.T) {
+	st := openTemp(t)
+	ctx := context.Background()
+
+	if err := st.Save(ctx, Record{
+		RunID: "r1", Step: QueuedStep, Frontier: nil, State: graph.NewState(),
+		Status: StatusQueued, GraphPath: "g.yaml",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec, ok, err := st.Latest(ctx, "r1")
+	if err != nil || !ok {
+		t.Fatalf("Latest: ok=%v err=%v", ok, err)
+	}
+	if rec.Status != StatusQueued {
+		t.Fatalf("status = %q, want %q before any real checkpoint", rec.Status, StatusQueued)
+	}
+
+	if err := st.Save(ctx, Record{
+		RunID: "r1", Step: 1, Frontier: []string{"b"}, State: stateWith("x", 1, 1),
+		Status: StatusRunning, GraphPath: "g.yaml",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	rec, ok, err = st.Latest(ctx, "r1")
+	if err != nil || !ok {
+		t.Fatalf("Latest: ok=%v err=%v", ok, err)
+	}
+	if rec.Status != StatusRunning || rec.Step != 1 {
+		t.Fatalf("Latest = %+v, want the real checkpoint once one exists", rec)
+	}
+}
+
+// List must surface a run that has only ever been queued: a run somebody just started must
+// appear before its first level completes, not only after.
+func TestListSurfacesAQueuedRun(t *testing.T) {
+	st := openTemp(t)
+	ctx := context.Background()
+	if err := st.Save(ctx, Record{
+		RunID: "r1", Step: QueuedStep, State: graph.NewState(), Status: StatusQueued,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	runs, err := st.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(runs) != 1 || runs[0].Status != StatusQueued {
+		t.Fatalf("List = %+v, want the queued run", runs)
+	}
+}

@@ -8,10 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/yoann/kern-orch/internal/config"
-	"github.com/yoann/kern-orch/internal/graph"
-	"github.com/yoann/kern-orch/internal/report"
 	"github.com/yoann/kern-orch/internal/skills"
-	"github.com/yoann/kern-orch/internal/topology"
 )
 
 func newRunCmd() *cobra.Command {
@@ -21,28 +18,20 @@ func newRunCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg := config.FromEnv()
-			activity := &activityRelay{}
-			runner := newRunner(cfg, activity)
 			graphPath, err := filepath.Abs(args[0])
 			if err != nil {
 				return err
 			}
 			runID := newRunID()
-			name := graphName(graphPath)
-			reporter := report.NewHTTP(cfg.StepReportURL)
-			// Levels are delivered off the engine's thread, so the last one — and the
-			// failure that may follow it — would die with this process without a flush.
-			defer reporter.Flush()
 
-			// Wired before the graph is built, not after: a subgraph node receives its
-			// hook at construction time.
-			reg := builtinRegistry(runner)
-			nestedRuns(reg, reporter, runID)
-
-			g, err := topology.LoadFile(graphPath, reg)
+			// Fails fast on a bad path or a bad graph, before the store or a sink opens.
+			// No mailbox: the bare CLI has nothing live to steer through, so a graph
+			// with an approval node refuses to load here — see wireApproval.
+			prepared, err := prepareRun(cfg, runID, graphPath, "", "", nil)
 			if err != nil {
 				return err
 			}
+
 			store, err := openStore(cfg)
 			if err != nil {
 				return err
@@ -55,27 +44,7 @@ func newRunCmd() *cobra.Command {
 				fmt.Fprintf(cmd.ErrOrStderr(), "kern-orch: publish skills catalogue: %v\n", err)
 			}
 
-			steps := &stepCounter{}
-
-			// The runner exists before the run has an id, so the hook is wired here.
-			// Flushing before returning matters: the signal that says an agent stopped is
-			// the last one a run emits, and it is exactly the one a process exiting would
-			// drop — leaving a beacon lit over a run that is long over.
-			activityReporter := report.NewActivityReporter(cfg.ActivityReportURL)
-			activity.fn = func(nodeID string, generating bool) {
-				activityReporter.Report(cmd.Context(), runID, name, nodeID, generating)
-			}
-			defer activityReporter.Flush()
-
-			err = graph.NewEngine(g).
-				OnStep(multiStep(
-					checkpointHook(store, runID, graphPath),
-					steps.count,
-					reporter.Hook(runID, name, describeTopology(graphPath)),
-				)).
-				Run(cmd.Context(), graph.NewState())
-			if err != nil {
-				reporter.ReportFailure(cmd.Context(), runID, name, steps.last, steps.frontier, failedNodes(err), err.Error())
+			if err := prepared.run(cmd.Context(), store, runID, nil); err != nil {
 				fmt.Fprintf(cmd.OutOrStdout(), "run %s failed at last checkpoint: %v\n", runID, err)
 				fmt.Fprintf(cmd.OutOrStdout(), "resume with: kern-orch resume %s\n", runID)
 				return err
@@ -119,34 +88,16 @@ func newResumeCmd() *cobra.Command {
 			if graphPath == "" {
 				return fmt.Errorf("run %q has no recorded graph path; pass it explicitly: resume %s <graph.yaml>", runID, runID)
 			}
-			activity := &activityRelay{}
-			name := graphName(graphPath)
-			reporter := report.NewHTTP(cfg.StepReportURL)
-			defer reporter.Flush()
 
-			reg := builtinRegistry(newRunner(cfg, activity))
-			nestedRuns(reg, reporter, runID)
-
-			g, err := topology.LoadFile(graphPath, reg)
+			// Requester and dossier carry over from the original run: resuming is not a
+			// new request, and the same actor who could steer it before still can, still
+			// under the same case if it had one.
+			prepared, err := prepareRun(cfg, runID, graphPath, rec.Requester, rec.Dossier, nil)
 			if err != nil {
 				return err
 			}
-			steps := &stepCounter{last: rec.Step}
 
-			activityReporter := report.NewActivityReporter(cfg.ActivityReportURL)
-			activity.fn = func(nodeID string, generating bool) {
-				activityReporter.Report(cmd.Context(), runID, name, nodeID, generating)
-			}
-			defer activityReporter.Flush()
-
-			if err := graph.NewEngine(g).
-				OnStep(multiStep(
-					checkpointHook(store, runID, graphPath),
-					steps.count,
-					reporter.Hook(runID, name, describeTopology(graphPath)),
-				)).
-				RunFrom(cmd.Context(), rec.State, rec.Frontier); err != nil {
-				reporter.ReportFailure(cmd.Context(), runID, name, steps.last, steps.frontier, failedNodes(err), err.Error())
+			if err := prepared.run(cmd.Context(), store, runID, &rec); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "run %s resumed and completed\n", runID)

@@ -22,12 +22,32 @@ const (
 	TypeAgent Type = "agent"
 )
 
+// Param declares one named input a tool skill's command accepts, sent under that name in
+// the invocation's `input` object.
+type Param struct {
+	Name     string `yaml:"name"`
+	Type     string `yaml:"type"` // string | number | bool; unrecognized types skip validation
+	Required bool   `yaml:"required"`
+}
+
 // Skill is the parsed metadata of one SKILL.md.
 type Skill struct {
 	Name        string `yaml:"name"`
 	Type        Type   `yaml:"type"`
 	Description string `yaml:"description"`
-	Dir         string `yaml:"-"`
+	// Command is the subprocess a tool skill runs when invoked (EPIC-03): argv, first
+	// element the executable. Empty means this skill is not invocable this way — most
+	// skills, including every agent, leave it unset.
+	Command []string `yaml:"command,omitempty"`
+	// Params is the input the command accepts. Declared here, not guessed from a call,
+	// so a caller can be told what a tool needs before ever invoking it.
+	Params []Param `yaml:"params,omitempty"`
+	// Graph is a topology YAML path for an agent skill dispatched from chat. Empty (most
+	// agent skills, e.g. planner) means the one-node ad-hoc run C6 already builds; set,
+	// Dispatch loads this file instead — a fixed multi-node pipeline (e.g. a human
+	// approval gate between two agent steps) triggered the same way as a single agent.
+	Graph string `yaml:"graph,omitempty"`
+	Dir   string `yaml:"-"`
 }
 
 // Registry holds the loaded skills keyed by name.

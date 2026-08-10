@@ -1,0 +1,48 @@
+# community-management-agency : contenu de communication (posts de référencement,
+# rédaction de prospection écrite) piloté en langage naturel depuis le chat kern-ui
+# (POST /api/v1/dispatch {"skill":"community-management-agency","text":"..."}).
+#
+# Double mode côté stratège (skills/community-management-agency/agent_cli.py) : si le
+# texte du chat contient déjà une stratégie complète, le stratège se limite à un avis
+# court (state["mode"]="avis") et le graphe saute directement à la rédaction — c'est la
+# stratégie de l'utilisateur, déjà décidée par lui, rien à faire valider. Sinon le
+# stratège en propose une lui-même (state["mode"]="proposition") et un humain doit la
+# valider avant toute rédaction (confirm_strategie).
+#
+# La publication, elle, passe TOUJOURS par une validation humaine — jamais sautée,
+# c'est la seule action externe réelle du graphe (confirm_publication).
+entry: audience
+nodes:
+  - id: audience
+    type: agent
+    prompt: Prépare un brief d'audience à partir de la demande.
+  - id: strategiste
+    type: agent
+    prompt: Donne un avis sur la stratégie fournie, ou en propose une si aucune ne l'est.
+  - id: confirm_strategie
+    type: approval
+  - id: strategie_refusee
+    type: tool
+    func: noop
+  - id: redacteur
+    type: agent
+    prompt: Rédige le contenu final par plateforme à partir de la stratégie retenue.
+  - id: confirm_publication
+    type: approval
+  - id: publieur
+    type: agent
+    prompt: Publie ou envoie le contenu validé.
+  - id: refus_publication
+    type: tool
+    func: noop
+edges:
+  - from: audience
+    to: [strategiste]
+  - from: strategiste
+    router: onStrategyMode
+  - from: confirm_strategie
+    router: onStrategieDecision
+  - from: redacteur
+    to: [confirm_publication]
+  - from: confirm_publication
+    router: onPublicationDecision

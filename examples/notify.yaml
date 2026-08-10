@@ -1,0 +1,14 @@
+# Demonstrates the `notify` builtin tool: a graph node that sends state key "message"
+# to Telegram. Requires KERN_TELEGRAM_BOT_TOKEN and KERN_TELEGRAM_CHAT_ID.
+# Run with: kern-orch run examples/notify.yaml
+entry: announce
+nodes:
+  - id: announce
+    type: tool
+    func: announce
+  - id: ping
+    type: tool
+    func: notify
+edges:
+  - from: announce
+    to: [ping]

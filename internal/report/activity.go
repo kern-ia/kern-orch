@@ -31,6 +31,7 @@ type ActivitySignal struct {
 // one a process exiting would drop.
 type ActivityReporter struct {
 	URL     string
+	Token   string // presented as a bearer credential; empty sends no header
 	Timeout time.Duration
 
 	// FlushTimeout caps how long Flush waits. Defaults to DefaultFlushTimeout.
@@ -77,7 +78,7 @@ func (r *ActivityReporter) Report(ctx context.Context, runID, graphName, nodeID 
 	r.wg.Add(1)
 	go func() {
 		defer r.wg.Done()
-		if err := postJSON(context.WithoutCancel(ctx), r.URL, r.timeout(), signal); err != nil {
+		if err := postJSON(context.WithoutCancel(ctx), r.URL, r.Token, r.timeout(), signal); err != nil {
 			r.errf("kern-orch: report activity of node %s in run %s: %v\n", nodeID, runID, err)
 		}
 	}()

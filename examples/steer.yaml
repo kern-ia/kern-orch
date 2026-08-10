@@ -1,0 +1,30 @@
+# Demonstrates C6's steering channel: an approval node blocks until a human decides,
+# then routes down whichever branch the decision picked.
+# Run with: kern-orch serve, then POST /api/v1/runs, then
+#   POST /api/v1/runs/{id}/nodes/confirm/decide {"decision":"approve"}
+#
+# Note: `start` runs before `confirm` on purpose, not for its own sake. A run's topology
+# only rides its first step event (see report.StepEvent), which only exists once a level
+# completes — and a level with the approval node as the graph's entry never completes
+# until a human decides it, so a consumer like kern-ui's Espace would never learn the
+# run's shape in time to draw a decision control. A node ahead of the approval sends that
+# first event before the wait begins, which is the shape most real graphs have anyway
+# (an agent decides something worth confirming, then a human confirms it).
+entry: start
+nodes:
+  - id: start
+    type: tool
+    func: noop
+  - id: confirm
+    type: approval
+  - id: approved
+    type: tool
+    func: announce
+  - id: refused
+    type: tool
+    func: noop
+edges:
+  - from: start
+    to: [confirm]
+  - from: confirm
+    router: onConfirmDecision

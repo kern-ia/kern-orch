@@ -39,6 +39,7 @@ type CatalogueEntry struct {
 // two configured URLs.
 type RegistryPublisher struct {
 	URL     string
+	Token   string // presented as a bearer credential; empty sends no header
 	Timeout time.Duration
 
 	now func() time.Time
@@ -80,7 +81,7 @@ func (p *RegistryPublisher) Publish(ctx context.Context, list []skills.Skill) er
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 
-	return postJSON(ctx, p.URL, p.timeout(), Catalogue{
+	return postJSON(ctx, p.URL, p.Token, p.timeout(), Catalogue{
 		Source: "kern-orch",
 		At:     p.now(),
 		Skills: entries,

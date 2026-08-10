@@ -1,0 +1,108 @@
+# courtage-extraction : extraction documentaire pour un dossier de rachat de crédit
+# (POST /api/v1/dispatch {"skill":"courtage-extraction","text":"/chemin/vers/dossier.pdf"}
+# — le texte du chat EST le chemin du document, même mécanisme que
+# community-management-agency: "message" (mailbox.Nudge côté kern-orch, internal/cmd/
+# serve.go) devient l'entrée du premier nœud. Voir Kern-Orch/skills/specs.md, "Ingestion
+# des documents" : seul le canal chemin/dossier est câblé pour l'instant, UI upload et
+# réception Telegram restent à construire).
+#
+# L'ordre des étapes est l'enjeu réel (specs.md, "Besoin #1") : le texte brut extrait par
+# OCR (reception -> extraction) passe par kern-anon (masquage_pii) AVANT que le nœud
+# d'interprétation (un vrai modèle de raisonnement) ne le voie. La validation humaine
+# (confirm_extraction) porte sur le résultat FINAL, démasqué — c'est la seule étape où les
+# données réelles redeviennent visibles, par un humain qui doit de toute façon les
+# valider, pas envoyées en clair à un tiers.
+entry: reception
+nodes:
+  - id: reception
+    type: agent
+    prompt: Vérifie que le document fourni existe et est accessible.
+  - id: extraction
+    type: agent
+    prompt: Découpe le document par page et en extrait le texte brut (OCR si nécessaire).
+  - id: masquage_pii
+    type: tool
+    func: anonymizePII
+  - id: interpretation
+    type: agent
+    prompt: Analyse le texte masqué et produit le résultat structuré (revenus, crédits, reste à vivre).
+  - id: demasquage_pii
+    type: tool
+    func: deanonymizePII
+  - id: confirm_extraction
+    type: approval
+  - id: extraction_validee
+    type: tool
+    func: noop
+  - id: extraction_a_corriger
+    type: tool
+    func: noop
+  # Besoin #2 (mémorandum, specs.md) — enchaîné sur le même graphe/état que besoin #1
+  # (choix utilisateur : "un seul flux dossier -> mémo"). notes_entretien arrive via un
+  # nudge sur le run pendant la pause à confirm_extraction, avant l'approbation qui fait
+  # continuer le graphe jusqu'ici. Même discipline de masquage PII que besoin #1, avec ses
+  # propres clés d'état (anonymizeMemoInput/deanonymizeMemoOutput) pour ne jamais écraser
+  # extracted_text/masked_text/interpretation du besoin #1, qui doivent survivre dans
+  # l'état final aux côtés du draft de mémorandum.
+  - id: memo_prep
+    type: agent
+    prompt: Assemble le dossier extrait et les notes d'entretien avant masquage.
+  - id: masquage_memo
+    type: tool
+    func: anonymizeMemoInput
+  - id: redaction_memo
+    type: agent
+    prompt: Rédige le draft de mémorandum de financement à partir du contenu masqué.
+  - id: demasquage_memo
+    type: tool
+    func: deanonymizeMemoOutput
+  - id: confirm_memo
+    type: approval
+  - id: memo_valide
+    type: tool
+    func: noop
+  - id: memo_a_corriger
+    type: tool
+    func: noop
+  # Besoin #3 (relances pièces manquantes, specs.md) — notifie l'ÉQUIPE INTERNE (canal
+  # Telegram déjà configuré, tool "notify"), jamais le client directement : aucun modèle
+  # client -> chat_id n'existe, et un bot Telegram ne peut pas contacter un utilisateur qui
+  # ne lui a jamais parlé en premier. onRelanceNeeded (internal/cmd/courtage_relance.go)
+  # combine le fan-out inconditionnel vers memo_prep et le branchement conditionnel ici, un
+  # graphe kern-orch n'autorisant qu'un seul routeur par nœud source.
+  - id: relance_prep
+    type: agent
+    prompt: Formate le message de relance interne à partir des pièces manquantes du dossier.
+  - id: relance_notify
+    type: tool
+    func: notify
+  - id: relance_non_necessaire
+    type: tool
+    func: noop
+edges:
+  - from: reception
+    to: [extraction]
+  - from: extraction
+    to: [masquage_pii]
+  - from: masquage_pii
+    to: [interpretation]
+  - from: interpretation
+    to: [demasquage_pii]
+  - from: demasquage_pii
+    to: [confirm_extraction]
+  - from: confirm_extraction
+    router: onExtractionDecision
+  - from: extraction_validee
+    router: onRelanceNeeded
+  - from: memo_prep
+    to: [masquage_memo]
+  - from: relance_prep
+    to: [relance_notify]
+  - from: masquage_memo
+    to: [redaction_memo]
+  - from: redaction_memo
+    to: [demasquage_memo]
+  - from: demasquage_memo
+    to: [confirm_memo]
+  - from: confirm_memo
+    router: onMemoDecision
