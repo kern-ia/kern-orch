@@ -352,3 +352,7 @@ kern-orch exposes no endpoint for them today.
   together.
 - [`docs/GLOSSAIRE.md`](docs/GLOSSAIRE.md) — full glossary of terms used across the project.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — what's built, what's planned.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
