@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/YoLaub/PresidioGo/analyzer"
-	"github.com/YoLaub/PresidioGo/anonymizer"
-	"github.com/YoLaub/PresidioGo/pii"
-	"github.com/YoLaub/PresidioGo/recognizers/ner"
-	"github.com/YoLaub/PresidioGo/registry"
+	"github.com/kern-ia/kern-anon/analyzer"
+	"github.com/kern-ia/kern-anon/anonymizer"
+	"github.com/kern-ia/kern-anon/pii"
+	"github.com/kern-ia/kern-anon/recognizers/ner"
+	"github.com/kern-ia/kern-anon/registry"
 	"github.com/yoann/kern-orch/internal/graph"
 )
 

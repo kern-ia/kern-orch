@@ -2,7 +2,7 @@
 
 package cmd
 
-import "github.com/YoLaub/PresidioGo/nlp"
+import "github.com/kern-ia/kern-anon/nlp"
 
 // nlpEngine is nil in the default build (no -tags onnx) — kern-anon's regex recognizers
 // (IBAN, email, phone, ...) still run; only NER-based person-name detection is absent.

@@ -3,7 +3,7 @@ module github.com/yoann/kern-orch
 go 1.26.5
 
 require (
-	github.com/YoLaub/PresidioGo v0.0.0-20260717123901-6090b99c738f
+	github.com/kern-ia/kern-anon v0.0.0-20260717123901-6090b99c738f
 	github.com/spf13/cobra v1.10.2
 	modernc.org/sqlite v1.54.0
 )
@@ -25,4 +25,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/YoLaub/PresidioGo => ../Kern-Anon
+replace github.com/kern-ia/kern-anon => ../Kern-Anon
