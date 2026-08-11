@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/YoLaub/PresidioGo/nlp"
-	"github.com/YoLaub/PresidioGo/nlp/onnx"
+	"github.com/kern-ia/kern-anon/nlp"
+	"github.com/kern-ia/kern-anon/nlp/onnx"
 )
 
 var (

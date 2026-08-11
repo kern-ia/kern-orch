@@ -126,7 +126,7 @@ func builtinRegistry(runner graph.AgentRunner, cfg config.Config) *topology.Regi
 	reg.Router("onAutoPublishRoute", onAutoPublishRoute)
 	reg.Tool("autoApprove", autoApproveTool)
 	// courtage-extraction (internal/cmd/courtage_anon.go) — kern-anon wired in as a real
-	// Go dependency (go.mod replace github.com/YoLaub/PresidioGo => ../Kern-Anon). Masking
+	// Go dependency (go.mod replace github.com/kern-ia/kern-anon => ../Kern-Anon). Masking
 	// happens before any interpretive model sees the text; demasking after, via a token
 	// map rather than Presidio's own position-based Deanonymize (see that file's doc).
 	reg.Tool("anonymizePII", anonymizePII)
