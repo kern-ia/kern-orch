@@ -17,6 +17,13 @@ type ActivitySignal struct {
 	NodeID     string    `json:"node_id"`
 	Generating bool      `json:"generating"`
 	At         time.Time `json:"at"`
+
+	// Message narrates, in plain language, what the node just did — set only on a stop
+	// signal, and only when the node's own output carries a state["display:<nodeID>"]
+	// value (the same convention kern-ui's hive panel already reads for a node's output).
+	// Opt-in: most nodes send none, and a start signal never carries one — there is
+	// nothing to narrate about work that has not happened yet.
+	Message string `json:"message,omitempty"`
 }
 
 // ActivityReporter posts activity signals to a single configured URL.
@@ -62,7 +69,7 @@ func (r *ActivityReporter) Enabled() bool { return r.URL != "" }
 // The context is detached from the caller's: a run is usually already cancelled by the time
 // its last agent stops, and reporting on the run's context would mean never reporting the
 // stop at all — leaving a beacon lit over a run that ended.
-func (r *ActivityReporter) Report(ctx context.Context, runID, graphName, nodeID string, generating bool) {
+func (r *ActivityReporter) Report(ctx context.Context, runID, graphName, nodeID string, generating bool, message string) {
 	if !r.Enabled() {
 		return
 	}
@@ -73,6 +80,7 @@ func (r *ActivityReporter) Report(ctx context.Context, runID, graphName, nodeID 
 		NodeID:     nodeID,
 		Generating: generating,
 		At:         r.now(),
+		Message:    message,
 	}
 
 	r.wg.Add(1)
