@@ -174,7 +174,7 @@ func TestActivityFlushGivesUpOnASinkThatNeverAnswers(t *testing.T) {
 	r.now = fixedNow
 	r.FlushTimeout = 150 * time.Millisecond
 
-	r.Report(context.Background(), "r1", "g", "n", true)
+	r.Report(context.Background(), "r1", "g", "n", true, "")
 
 	start := time.Now()
 	r.Flush()
@@ -204,7 +204,7 @@ func TestEveryReportCarriesTheConfiguredToken(t *testing.T) {
 	activity := NewActivityReporter(srv.URL)
 	activity.Token = "un-secret"
 	activity.now = fixedNow
-	activity.Report(context.Background(), "r1", "g", "n", true)
+	activity.Report(context.Background(), "r1", "g", "n", true, "")
 	activity.Flush()
 
 	registry := NewRegistryPublisher(srv.URL)

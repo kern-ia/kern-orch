@@ -28,12 +28,12 @@ import (
 // over empty and filled once the id exists. A nil target is a no-op, which is what an
 // unconfigured sink amounts to.
 type activityRelay struct {
-	fn func(nodeID string, generating bool)
+	fn func(nodeID string, generating bool, message string)
 }
 
-func (a *activityRelay) call(nodeID string, generating bool) {
+func (a *activityRelay) call(nodeID string, generating bool, message string) {
 	if a.fn != nil {
-		a.fn(nodeID, generating)
+		a.fn(nodeID, generating, message)
 	}
 }
 
@@ -300,8 +300,8 @@ func wireApproval(reg *topology.Registry, mailbox *steer.Mailbox, activity *acti
 		return
 	}
 	reg.OnApproval(func(ctx context.Context, nodeID string) (graph.Decision, error) {
-		activity.call(nodeID, true)
-		defer activity.call(nodeID, false)
+		activity.call(nodeID, true, "")
+		defer activity.call(nodeID, false, "")
 		return mailbox.AwaitDecision(ctx, nodeID)
 	})
 }

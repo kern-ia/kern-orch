@@ -71,8 +71,8 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 	name := graphName(graphPath)
 	activityReporter := report.NewActivityReporter(cfg.ActivityReportURL)
 	activityReporter.Token = cfg.SinkToken
-	activity.fn = func(nodeID string, generating bool) {
-		activityReporter.Report(context.Background(), runID, name, nodeID, generating)
+	activity.fn = func(nodeID string, generating bool, message string) {
+		activityReporter.Report(context.Background(), runID, name, nodeID, generating, message)
 	}
 
 	return &preparedRun{
@@ -475,8 +475,8 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dos
 
 	activityReporter := report.NewActivityReporter(cfg.ActivityReportURL)
 	activityReporter.Token = cfg.SinkToken
-	activity.fn = func(nodeID string, generating bool) {
-		activityReporter.Report(context.Background(), runID, skillName, nodeID, generating)
+	activity.fn = func(nodeID string, generating bool, message string) {
+		activityReporter.Report(context.Background(), runID, skillName, nodeID, generating, message)
 	}
 
 	return &preparedRun{

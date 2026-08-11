@@ -230,6 +230,7 @@ drop.
 | `node_id` | string | yes | The node whose model started or stopped. |
 | `generating` | bool | yes | `true` when the model began working, `false` when it finished. |
 | `at` | RFC 3339 | yes | When the transition happened. |
+| `message` | string | no | Plain-language narration of what the node just did, on a stop signal only — set when the node's own output carries `state["display:<node_id>"]`. Absent (never an empty string) whenever a node opts out. |
 
 **What kern-orch guarantees**
 
@@ -242,6 +243,10 @@ drop.
 - **Only agent nodes report.** A tool node runs Go code; no model is involved.
 - **Signals may arrive out of order**, being sent off-thread. Each carries `at` so a sink can
   keep only the freshest word about a node.
+- **`message` is opt-in, never invented.** It reuses a node's existing
+  `state["display:<node_id>"]` output — the same value kern-ui's hive panel already shows
+  for that node — rather than a second, separate way for a skill to narrate itself. A node
+  that sets no display key reports no message; kern-orch never fabricates one.
 
 ### Emitted — skills catalogue
 
