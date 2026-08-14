@@ -24,11 +24,22 @@ type Catalogue struct {
 // Deliberately narrower than skills.Skill: the directory does not travel, because a
 // filesystem path is an internal rather than a contract. Nor does any "wired" flag — a
 // loaded skill is by definition available here, so the field would read true on every row
-// and tell a consumer nothing it did not already know.
+// and tell a consumer nothing it did not already know. Custom/CreatedBy (C11) are the one
+// exception: kern-ui genuinely cannot decide whether to offer a delete control without
+// them, unlike Dir or "wired" which tell it nothing actionable.
 type CatalogueEntry struct {
 	Name        string `json:"name"`
 	Kind        string `json:"kind"` // tool | agent
 	Description string `json:"description,omitempty"`
+
+	// Custom is true for a skill created through C11's write path — false, and absent
+	// from the wire, for every skill the product ships. A consumer needs this to know
+	// which entries it may ever offer to delete.
+	Custom bool `json:"custom,omitempty"`
+	// CreatedBy names the account that created a custom skill — empty for every shipped
+	// one. A consumer compares this against its own signed-in account to decide whether
+	// to show a delete control, but the real check still happens server-side on delete.
+	CreatedBy string `json:"created_by,omitempty"`
 }
 
 // RegistryPublisher posts the skills catalogue to a single configured URL.
@@ -77,6 +88,8 @@ func (p *RegistryPublisher) Publish(ctx context.Context, list []skills.Skill) er
 			Name:        s.Name,
 			Kind:        string(s.Type),
 			Description: s.Description,
+			Custom:      s.Custom,
+			CreatedBy:   s.CreatedBy,
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
