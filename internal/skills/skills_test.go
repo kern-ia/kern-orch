@@ -39,6 +39,49 @@ func TestLoadParsesFrontmatterTypeAndDescription(t *testing.T) {
 	}
 }
 
+func TestLoadMergedUnionsBothTiers(t *testing.T) {
+	shipped := t.TempDir()
+	custom := t.TempDir()
+	writeSkill(t, shipped, "planner", "---\nname: planner\ntype: agent\ndescription: ships with the product\n---\n")
+	writeSkill(t, custom, "elise-helper", "---\nname: elise-helper\ntype: agent\ndescription: made by elise\ncreated_by: elise\n---\n")
+
+	reg, err := LoadMerged(shipped, custom)
+	if err != nil {
+		t.Fatalf("LoadMerged: %v", err)
+	}
+	if reg.Len() != 2 {
+		t.Fatalf("len = %d; want 2", reg.Len())
+	}
+
+	p, _ := reg.Get("planner")
+	if p.Custom {
+		t.Error("a shipped skill reports Custom = true")
+	}
+	h, _ := reg.Get("elise-helper")
+	if !h.Custom || h.CreatedBy != "elise" {
+		t.Errorf("elise-helper = %+v, want Custom=true CreatedBy=elise", h)
+	}
+}
+
+// A shipped skill can never be shadowed by a creation of the same name — the collision
+// is meant to be rejected at Create time, but a directory dropped in by hand should not
+// silently win over the product's own skill either.
+func TestLoadMergedKeepsTheShippedVersionOnNameCollision(t *testing.T) {
+	shipped := t.TempDir()
+	custom := t.TempDir()
+	writeSkill(t, shipped, "planner", "---\nname: planner\ntype: agent\ndescription: the real one\n---\n")
+	writeSkill(t, custom, "planner", "---\nname: planner\ntype: agent\ndescription: an impostor\ncreated_by: someone\n---\n")
+
+	reg, err := LoadMerged(shipped, custom)
+	if err != nil {
+		t.Fatalf("LoadMerged: %v", err)
+	}
+	p, _ := reg.Get("planner")
+	if p.Custom || p.Description != "the real one" {
+		t.Errorf("planner = %+v, want the shipped version to win", p)
+	}
+}
+
 func TestLoadDefaultsNameFromDirAndRejectsBadType(t *testing.T) {
 	dir := t.TempDir()
 	// missing name -> defaults to directory name; bad type -> error

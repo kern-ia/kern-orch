@@ -238,20 +238,18 @@ func (c *stepCounter) count(_ context.Context, info graph.StepInfo, _ *graph.Sta
 	return nil
 }
 
-// publishRegistry pushes the skills catalogue to the configured sink.
+// publishRegistry pushes reg's catalogue to the configured sink. The caller loads reg
+// itself — a plain skills.Load for the publish-skills CLI's explicit --skills-dir escape
+// hatch, LoadMerged everywhere else (C11) so a created skill rides along too.
 //
 // Best-effort by design, exactly like the step reporter: publishing is observability, and
 // a sink that is slow, broken or absent must never be able to stop a graph from running.
 // The caller gets the error only so it can say something useful; it must not propagate it.
-func publishRegistry(ctx context.Context, cfg config.Config, dir string) error {
+func publishRegistry(ctx context.Context, cfg config.Config, reg *skills.Registry) error {
 	pub := report.NewRegistryPublisher(cfg.RegistryReportURL)
 	pub.Token = cfg.SinkToken
 	if !pub.Enabled() {
 		return nil
-	}
-	reg, err := skills.Load(dir)
-	if err != nil {
-		return err
 	}
 	return pub.Publish(ctx, reg.List())
 }

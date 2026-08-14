@@ -7,9 +7,13 @@ import "os"
 
 // Environment variable names.
 const (
-	EnvSkillsDir    = "KERN_SKILLS_DIR"
-	EnvCheckpointDB = "KERN_CHECKPOINT_DB"
-	EnvAgentCLI     = "KERN_AGENT_CLI"
+	EnvSkillsDir = "KERN_SKILLS_DIR"
+	// EnvSkillsCustomDir is where a skill created through C11's write path is written —
+	// a separate directory from EnvSkillsDir on purpose: a product update can overwrite
+	// EnvSkillsDir wholesale without ever touching a creation.
+	EnvSkillsCustomDir = "KERN_SKILLS_CUSTOM_DIR"
+	EnvCheckpointDB    = "KERN_CHECKPOINT_DB"
+	EnvAgentCLI        = "KERN_AGENT_CLI"
 	// EnvStepReportURL points at an HTTP sink receiving one POST per completed graph
 	// level. Unset means no reporting. The URL is the whole contract: kern-orch knows
 	// nothing of the sink's route shape.
@@ -52,9 +56,11 @@ const (
 
 // Config is the resolved runtime configuration.
 type Config struct {
-	SkillsDir    string
-	CheckpointDB string
-	AgentCLI     string // path to external LLM CLI; empty => use the deterministic stub
+	SkillsDir string
+	// CustomSkillsDir is where a created skill (C11) is written and read back from.
+	CustomSkillsDir string
+	CheckpointDB    string
+	AgentCLI        string // path to external LLM CLI; empty => use the deterministic stub
 	// StepReportURL is an HTTP sink for step transitions; empty => no reporting.
 	StepReportURL string
 	// RegistryReportURL is an HTTP sink for the skills catalogue; empty => no publishing.
@@ -82,6 +88,7 @@ type Config struct {
 func FromEnv() Config {
 	return Config{
 		SkillsDir:         envOr(EnvSkillsDir, "skills"),
+		CustomSkillsDir:   envOr(EnvSkillsCustomDir, "skills-custom"),
 		CheckpointDB:      envOr(EnvCheckpointDB, "./data/kern-orch.db"),
 		AgentCLI:          os.Getenv(EnvAgentCLI),
 		StepReportURL:     os.Getenv(EnvStepReportURL),
