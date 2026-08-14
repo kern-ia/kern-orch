@@ -49,6 +49,43 @@ func TestRegistryContractFieldNames(t *testing.T) {
 	}
 }
 
+// A created skill carries who made it, so a consumer can decide whether to offer deletion.
+func TestPublisherCarriesCustomAndCreatedBy(t *testing.T) {
+	s := newSink(t, http.StatusAccepted)
+	p := NewRegistryPublisher(s.server.URL)
+	p.now = fixedNow
+
+	_ = p.Publish(context.Background(), []skills.Skill{
+		{Name: "accueil", Type: skills.TypeAgent, Custom: true, CreatedBy: "elise"},
+	})
+
+	entry := s.last()["skills"].([]any)[0].(map[string]any)
+	if entry["custom"] != true {
+		t.Errorf("custom = %v, want true", entry["custom"])
+	}
+	if entry["created_by"] != "elise" {
+		t.Errorf("created_by = %v, want elise", entry["created_by"])
+	}
+}
+
+// A shipped skill (Custom false, CreatedBy empty) must not carry either field across the
+// wire — the fixture never has them, and this is what keeps that assertion meaningful.
+func TestPublisherOmitsCustomFieldsForAShippedSkill(t *testing.T) {
+	s := newSink(t, http.StatusAccepted)
+	p := NewRegistryPublisher(s.server.URL)
+	p.now = fixedNow
+
+	_ = p.Publish(context.Background(), []skills.Skill{{Name: "planner", Type: skills.TypeAgent}})
+
+	entry := s.last()["skills"].([]any)[0].(map[string]any)
+	if _, ok := entry["custom"]; ok {
+		t.Error("a shipped skill carries a `custom` field")
+	}
+	if _, ok := entry["created_by"]; ok {
+		t.Error("a shipped skill carries a `created_by` field")
+	}
+}
+
 // The directory a skill lives in is kern-orch's business: a filesystem path is an internal,
 // not a contract, and a consumer must never be handed one.
 func TestPublisherDoesNotLeakTheSkillDirectory(t *testing.T) {

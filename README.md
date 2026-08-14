@@ -285,6 +285,8 @@ path on a host it knows nothing about.
 | `skills[].name` | string | yes | The key. kern-orch already indexes its registry by name, so no second identifier was invented for the wire. |
 | `skills[].kind` | string | yes | `tool` or `agent` — the `type:` of the SKILL.md frontmatter. |
 | `skills[].description` | string | no | The frontmatter `description`, one line. |
+| `skills[].custom` | bool | no | `true` for a skill created through C11's write path; absent (never `false`) for every skill the product ships. |
+| `skills[].created_by` | string | no | The account that created a custom skill; absent for a shipped one. |
 
 **What kern-orch guarantees**
 
@@ -293,6 +295,8 @@ path on a host it knows nothing about.
 - **Sorted by name**, so a sink never has to sort.
 - **Publishing never fails a run**, exactly like step reporting: a broken sink costs a line
   on stderr and nothing else.
+- **`custom`/`created_by` are the one exception to "what does not travel" below** — a
+  consumer genuinely cannot decide whether to offer deleting a skill without them.
 
 **What deliberately does not travel.** A skill's directory — a filesystem path is an
 internal, not a contract. Its SKILL.md body. Any "wired" flag — a loaded skill is by
