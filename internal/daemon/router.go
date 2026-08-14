@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/yoann/kern-orch/internal/checkpoint"
+	"github.com/yoann/kern-orch/internal/skills"
 	"github.com/yoann/kern-orch/internal/tools"
 )
 
@@ -33,6 +34,14 @@ var ErrForbidden = errors.New("daemon: not this run's requester")
 // ErrUnknownNode is returned by Decide when no node of that id is currently awaiting a
 // decision on the given run — either it never paused there, or it already got one.
 var ErrUnknownNode = errors.New("daemon: unknown node")
+
+// ErrUnknownSkill is returned by DeleteSkill for a name that is not a known, custom-tier
+// skill — a shipped skill is never a candidate for deletion through this path, so this
+// covers "does not exist" and "not deletable" alike (C11).
+var ErrUnknownSkill = errors.New("daemon: unknown skill")
+
+// ErrNotSkillOwner is returned by DeleteSkill when requestedBy did not create the skill.
+var ErrNotSkillOwner = errors.New("daemon: not this skill's creator")
 
 // UnknownSkillError is returned by Dispatch when no skill of that name is loaded. It
 // carries the names that do exist, so a caller who mistyped a command sees what is real
@@ -102,6 +111,16 @@ type Runner interface {
 	// convention courtage-extraction already uses for a chat command or a Telegram
 	// document.
 	Upload(ctx context.Context, filename string, content io.Reader) (path string, err error)
+
+	// CreateSkill writes a new agent skill (C11), one node per step, chained in order.
+	// Returns an ordinary error for a malformed name, an empty step list, or a name
+	// already taken in either tier — none of these need a typed sentinel, the message
+	// itself is what a caller shows.
+	CreateSkill(ctx context.Context, name, description, createdBy string, steps []skills.Step) (skills.Skill, error)
+
+	// DeleteSkill removes a created skill. ErrUnknownSkill if it is not a known custom
+	// skill, ErrNotSkillOwner if requestedBy did not create it.
+	DeleteSkill(ctx context.Context, name, requestedBy string) error
 }
 
 // NewRouter builds the daemon's HTTP handler. An empty token leaves every endpoint open,
@@ -123,6 +142,8 @@ func NewRouter(runner Runner, token string) http.Handler {
 	mux.HandleFunc("POST /api/v1/runs/{id}/nodes/{node}/decide", s.auth(s.handleDecide))
 	mux.HandleFunc("POST /api/v1/dispatch", s.auth(s.handleDispatch))
 	mux.HandleFunc("POST /api/v1/uploads", s.auth(s.handleUpload))
+	mux.HandleFunc("POST /api/v1/skills", s.auth(s.handleCreateSkill))
+	mux.HandleFunc("DELETE /api/v1/skills/{name}", s.auth(s.handleDeleteSkill))
 	return mux
 }
 
@@ -336,6 +357,67 @@ func (s *server) handleDispatch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 	default:
 		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+// handleCreateSkill writes a new agent skill (C11). actor is trusted from the body here
+// because, unlike a browser talking to kern-ui directly, the caller of this daemon
+// endpoint is kern-ui's own backend — it already read the real signed-in account from its
+// session before ever reaching this handler, the same trust boundary Dispatch/Decide/Nudge
+// already rely on for their own actor field.
+func (s *server) handleCreateSkill(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Actor       string `json:"actor"`
+		Steps       []struct {
+			Name         string `json:"name"`
+			Instructions string `json:"instructions"`
+		} `json:"steps"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "malformed body: want {\"name\":\"...\",\"steps\":[...]}")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	steps := make([]skills.Step, len(body.Steps))
+	for i, st := range body.Steps {
+		steps[i] = skills.Step{Name: st.Name, Instructions: st.Instructions}
+	}
+
+	sk, err := s.runner.CreateSkill(r.Context(), body.Name, body.Description, body.Actor, steps)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, sk)
+}
+
+// handleDeleteSkill removes a created skill. Same actor trust boundary as
+// handleCreateSkill — kern-ui's backend, not the browser, is the caller.
+func (s *server) handleDeleteSkill(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Actor string `json:"actor"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "malformed body: want {\"actor\":\"...\"}")
+		return
+	}
+
+	err := s.runner.DeleteSkill(r.Context(), r.PathValue("name"), body.Actor)
+	switch {
+	case errors.Is(err, ErrUnknownSkill):
+		writeError(w, http.StatusNotFound, "unknown skill")
+	case errors.Is(err, ErrNotSkillOwner):
+		writeError(w, http.StatusForbidden, "not this skill's creator")
+	case err != nil:
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 	}
 }
 

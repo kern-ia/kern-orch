@@ -349,7 +349,7 @@ func parseDecision(s string) (graph.Decision, error) {
 // one-node run whose whole prompt is text — no template, nothing to configure, matching
 // what a skill actually carries today.
 func (d *daemonRunner) Dispatch(ctx context.Context, skillName, text, requester, dossier string) (daemon.DispatchResult, error) {
-	reg, err := skills.Load(d.cfg.SkillsDir)
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
 	if err != nil {
 		return daemon.DispatchResult{}, err
 	}
@@ -489,7 +489,7 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dos
 // command). Skills are re-read on every call, same as list-skills and the registry
 // publisher — a directory, not a store with its own change notifications.
 func (d *daemonRunner) ListTools(ctx context.Context) ([]tools.Spec, error) {
-	reg, err := skills.Load(d.cfg.SkillsDir)
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -507,7 +507,7 @@ func (d *daemonRunner) ListTools(ctx context.Context) ([]tools.Spec, error) {
 // that is not a loaded, command-backed tool skill is daemon.ErrUnknownTool — the router
 // maps that to 404 rather than a caller having to parse an error string.
 func (d *daemonRunner) InvokeTool(ctx context.Context, name string, input map[string]any) (tools.Result, error) {
-	reg, err := skills.Load(d.cfg.SkillsDir)
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
 	if err != nil {
 		return tools.Result{}, err
 	}
@@ -517,6 +517,55 @@ func (d *daemonRunner) InvokeTool(ctx context.Context, name string, input map[st
 	}
 	runner := &tools.Runner{Stderr: os.Stderr}
 	return runner.Invoke(ctx, sk, input)
+}
+
+// CreateSkill writes a new agent skill into the custom tier (C11). The freshly-merged
+// registry the collision check reads is also what gets re-published afterwards — best
+// effort, same as startup's own publish — so a signed-in account sees their creation in
+// the Grimoire without waiting for the next run to carry the catalogue along.
+func (d *daemonRunner) CreateSkill(ctx context.Context, name, description, createdBy string, steps []skills.Step) (skills.Skill, error) {
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
+	if err != nil {
+		return skills.Skill{}, err
+	}
+	sk, err := skills.Create(d.cfg.CustomSkillsDir, reg, name, description, createdBy, steps)
+	if err != nil {
+		return skills.Skill{}, err
+	}
+	d.republishSkills(ctx)
+	return sk, nil
+}
+
+// DeleteSkill removes a created skill, refusing anyone but its own creator.
+// daemon.ErrUnknownSkill covers both "no such skill" and "not a custom one" — a shipped
+// skill was never a candidate for this path, so there is nothing more specific to say.
+func (d *daemonRunner) DeleteSkill(ctx context.Context, name, requestedBy string) error {
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
+	if err != nil {
+		return err
+	}
+	sk, ok := reg.Get(name)
+	if !ok || !sk.Custom {
+		return daemon.ErrUnknownSkill
+	}
+	if err := skills.Delete(sk, requestedBy); err != nil {
+		return daemon.ErrNotSkillOwner
+	}
+	d.republishSkills(ctx)
+	return nil
+}
+
+// republishSkills pushes the freshly-changed catalogue, best-effort like every other
+// publish in this file — a dead sink must never turn a real create/delete into a failure.
+func (d *daemonRunner) republishSkills(ctx context.Context) {
+	reg, err := skills.LoadMerged(d.cfg.SkillsDir, d.cfg.CustomSkillsDir)
+	if err != nil {
+		slog.Warn("kern-orch: reload skills catalogue after write", "error", err)
+		return
+	}
+	if err := publishRegistry(ctx, d.cfg, reg); err != nil {
+		slog.Warn("kern-orch: publish skills catalogue after write", "error", err)
+	}
 }
 
 // Upload saves an uploaded document under cfg.UploadDir and returns its local path — the
@@ -582,7 +631,9 @@ func newServeCmd() *cobra.Command {
 			// hand first. A daemon runs for hours or days, so this fires once at startup
 			// rather than per-dispatch — best-effort, a dead sink must never stop the
 			// server from listening.
-			if err := publishRegistry(cmd.Context(), cfg, cfg.SkillsDir); err != nil {
+			if reg, err := skills.LoadMerged(cfg.SkillsDir, cfg.CustomSkillsDir); err != nil {
+				slog.Warn("kern-orch: load skills catalogue", "error", err)
+			} else if err := publishRegistry(cmd.Context(), cfg, reg); err != nil {
 				slog.Warn("kern-orch: publish skills catalogue", "error", err)
 			}
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yoann/kern-orch/internal/checkpoint"
+	"github.com/yoann/kern-orch/internal/skills"
 	"github.com/yoann/kern-orch/internal/tools"
 )
 
@@ -64,6 +65,13 @@ type fakeRunner struct {
 	uploaded   []uploadCall
 	uploadPath string
 	uploadErr  error
+
+	createSkillCalls  []createSkillCall
+	createSkillResult skills.Skill
+	createSkillErr    error
+
+	deleteSkillCalls []deleteSkillCall
+	deleteSkillErr   error
 }
 
 type invocation struct {

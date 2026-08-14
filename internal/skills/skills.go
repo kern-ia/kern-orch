@@ -48,6 +48,15 @@ type Skill struct {
 	// approval gate between two agent steps) triggered the same way as a single agent.
 	Graph string `yaml:"graph,omitempty"`
 	Dir   string `yaml:"-"`
+
+	// CreatedBy names the account that created this skill through C11's write path.
+	// Empty for every skill shipped on disk — nobody "created" those, they came with the
+	// product.
+	CreatedBy string `yaml:"created_by,omitempty"`
+	// Custom is true when this skill was loaded from the custom tier (LoadMerged's second
+	// directory) rather than the shipped one — never itself written to a SKILL.md, derived
+	// from which directory produced it, the same way Dir is.
+	Custom bool `yaml:"-"`
 }
 
 // Registry holds the loaded skills keyed by name.
@@ -78,12 +87,42 @@ func (r *Registry) List() []Skill {
 // A missing dir yields an empty registry (skills are optional).
 func Load(dir string) (*Registry, error) {
 	reg := &Registry{byName: make(map[string]Skill)}
+	if err := loadInto(reg, dir, false); err != nil {
+		return nil, err
+	}
+	return reg, nil
+}
+
+// LoadMerged reads the shipped, read-only directory and the custom (user-created) one,
+// and merges them into one registry (C11). A name present in both keeps the shipped
+// version — a creation can never shadow a skill the product ships, the same guarantee
+// C11's write path gives in the other direction (a shipped update can never overwrite a
+// creation, since they live in separate directories to begin with).
+func LoadMerged(shippedDir, customDir string) (*Registry, error) {
+	reg := &Registry{byName: make(map[string]Skill)}
+	if err := loadInto(reg, shippedDir, false); err != nil {
+		return nil, err
+	}
+	custom := &Registry{byName: make(map[string]Skill)}
+	if err := loadInto(custom, customDir, true); err != nil {
+		return nil, err
+	}
+	for name, sk := range custom.byName {
+		if _, taken := reg.byName[name]; taken {
+			continue
+		}
+		reg.byName[name] = sk
+	}
+	return reg, nil
+}
+
+func loadInto(reg *Registry, dir string, custom bool) error {
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return reg, nil
+		return nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("skills: read %q: %w", dir, err)
+		return fmt.Errorf("skills: read %q: %w", dir, err)
 	}
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -95,16 +134,17 @@ func Load(dir string) (*Registry, error) {
 			continue // a subdir without SKILL.md is not a skill
 		}
 		if err != nil {
-			return nil, fmt.Errorf("skills: read %q: %w", path, err)
+			return fmt.Errorf("skills: read %q: %w", path, err)
 		}
 		sk, err := parse(raw, e.Name())
 		if err != nil {
-			return nil, fmt.Errorf("skills: %q: %w", e.Name(), err)
+			return fmt.Errorf("skills: %q: %w", e.Name(), err)
 		}
 		sk.Dir = filepath.Join(dir, e.Name())
+		sk.Custom = custom
 		reg.byName[sk.Name] = sk
 	}
-	return reg, nil
+	return nil
 }
 
 // parse extracts the YAML frontmatter (between the first two `---` lines) of a SKILL.md.

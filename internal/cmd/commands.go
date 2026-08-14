@@ -40,7 +40,9 @@ func newRunCmd() *cobra.Command {
 
 			// The catalogue rides along with the run so a sink is fed without needing a
 			// separate command. A failure here is worth a line on stderr and nothing more.
-			if err := publishRegistry(cmd.Context(), cfg, cfg.SkillsDir); err != nil {
+			if reg, err := skills.LoadMerged(cfg.SkillsDir, cfg.CustomSkillsDir); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "kern-orch: load skills catalogue: %v\n", err)
+			} else if err := publishRegistry(cmd.Context(), cfg, reg); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "kern-orch: publish skills catalogue: %v\n", err)
 			}
 
@@ -181,7 +183,11 @@ func newPublishSkillsCmd() *cobra.Command {
 					config.EnvRegistryReportURL)
 				return nil
 			}
-			if err := publishRegistry(cmd.Context(), cfg, dir); err != nil {
+			reg, err := skills.Load(dir)
+			if err != nil {
+				return err
+			}
+			if err := publishRegistry(cmd.Context(), cfg, reg); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "catalogue published to %s\n", cfg.RegistryReportURL)
