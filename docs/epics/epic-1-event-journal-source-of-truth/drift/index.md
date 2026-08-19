@@ -1,7 +1,4 @@
-# Drift — Epic 1: Event journal as the source of truth
+# Drift records
 
-Records of the code diverging from a standard or an issue boundary this epic already
-decided. `close-epic` promotes them into `docs/planning/DRIFT.md`; until then this is the
-only place a later issue can read them.
-
-* [Nudge events recorded in issue 07 rather than issue 06](./07-nudge-event-recorded-early.md) - issue 07 (#11), fix-now
+* [Nudge events recorded in issue 07 rather than issue 06](07-nudge-event-recorded-early.md) - fix-now, resolved by issue 06 (PR #26)
+* [A freeze inside a fan-out level is now a live refusal, not a silent bug](06-freeze-inside-fanout-now-refused.md) - accepted

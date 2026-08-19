@@ -8,7 +8,7 @@ epic: 1
 issue: 13
 slug: runtime-equivalence-check
 size: S
-status: pr-open
+status: done
 gh_issue: 24
 gh_pr: 32
 resource: https://github.com/kern-ia/kern-orch/issues/24

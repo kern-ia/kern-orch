@@ -33,8 +33,9 @@ gh_issue: 11
   rejected, it is precisely the "row that looks derived and is not" the issue exists to
   remove; (3) reorder the epic so 06 lands first — not this agent's call, and 06 was
   deliberately scheduled after 07 because it also touches `internal/cmd/runtime.go`.
-- **Disposition**: fix-now — the minimum slice of issue 06 that keeps 07's own acceptance
-  criteria true. Freeze events, the combination rule's own treatment and any change to
+- **Disposition**: resolved (2026-08-19) — issue 06 (PR #26) adopted the recording as designed,
+  never adding a second nudge event. Nothing further to do; kept as fix-now's minimum slice
+  reasoning for the historical record. Freeze events, the combination rule's own treatment and any change to
   `internal/graph`'s event port were left alone.
 - **Revisit when**: issue 06 (#10) is implemented. Its author inherits `recordNudge`,
   `nudgeOrigin` and `DrainNudges`'s return value, and should either adopt them or replace

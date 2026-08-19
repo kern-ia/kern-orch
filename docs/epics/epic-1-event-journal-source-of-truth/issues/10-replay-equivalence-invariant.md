@@ -8,7 +8,7 @@ epic: 1
 issue: 10
 slug: replay-equivalence-invariant
 size: M
-status: pr-open
+status: done
 gh_issue: 14
 gh_pr: 30
 resource: https://github.com/kern-ia/kern-orch/issues/14

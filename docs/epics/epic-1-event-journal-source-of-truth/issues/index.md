@@ -12,4 +12,4 @@
 * [Assert replay equivalence over real engine runs](./10-replay-equivalence-invariant.md) - M, done (#14, PR #30)
 * [Rewire the reporter to project the journal](./11-reporter-consumes-journal.md) - M, done (#15, PR #31)
 * [Close an interrupted run's tail with synthetic events](./12-interrupted-tail-closing.md) - M, done (#23, PR #28)
-* [Opt-in runtime replay-equivalence check](./13-runtime-equivalence-check.md) - S, pr-open (#24, PR #32)
+* [Opt-in runtime replay-equivalence check](./13-runtime-equivalence-check.md) - S, done (#24, PR #32)

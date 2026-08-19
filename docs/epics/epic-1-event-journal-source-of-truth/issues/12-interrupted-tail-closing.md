@@ -8,7 +8,7 @@ epic: 1
 issue: 12
 slug: interrupted-tail-closing
 size: M
-status: pr-open
+status: done
 gh_issue: 23
 gh_pr: 28
 resource: https://github.com/kern-ia/kern-orch/issues/23
