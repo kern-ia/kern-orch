@@ -10,3 +10,4 @@
 * **Update**: Issue 02 (#6, journal event vocabulary) implemented on `feature/journal-event-vocabulary`; PR #18 open against `dev`.
 * **Update**: Issue 02 (#6, PR #18) merged into `dev`; issue closed.
 * **Update**: Issue 05 (#9, engine event emission) started on `feature/engine-event-emission`.
+* **Update**: Issue 05 (#9, engine event emission) implemented on `feature/engine-event-emission`; PR #21 open against `dev`.

@@ -4,7 +4,7 @@
 * [Define the internal journal event vocabulary](./02-journal-event-vocabulary.md) - S, done (#6, PR #18)
 * [Persist and read the journal in SQLite](./03-journal-store-append-read.md) - M, open (#7)
 * [Project a run state by replaying its journal](./04-state-projection-from-events.md) - M, open (#8)
-* [Emit per-node and level-boundary events from the engine](./05-engine-event-emission.md) - M, in-progress (#9)
+* [Emit per-node and level-boundary events from the engine](./05-engine-event-emission.md) - M, pr-open (#9, PR #21)
 * [Record nudge, freeze and the combination rule as events](./06-non-node-mutations-as-events.md) - M, open (#10)
 * [Write the journal and the projection cache in one transaction](./07-atomic-journal-and-projection.md) - M, open (#11)
 * [Resume by replaying the journal, closing an interrupted tail](./08-replay-based-resume.md) - M, open (#12)
