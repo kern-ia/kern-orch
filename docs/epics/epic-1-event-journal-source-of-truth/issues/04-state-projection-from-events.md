@@ -3,13 +3,14 @@ type: Issue
 title: "Project a run state by replaying its journal"
 description: "A pure replay function that rebuilds graph.State from an ordered event slice under the recorded combination rule."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T15:40:00Z
 epic: 1
 issue: 04
 slug: state-projection-from-events
 size: M
-status: open
+status: done
 gh_issue: 8
+gh_pr: 20
 resource: https://github.com/kern-ia/kern-orch/issues/8
 depends_on: [2]
 ---
