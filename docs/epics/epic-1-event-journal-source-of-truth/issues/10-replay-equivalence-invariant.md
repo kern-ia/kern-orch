@@ -3,12 +3,12 @@ type: Issue
 title: "Assert replay equivalence over real engine runs"
 description: "Assert over real engine runs that replaying a journal yields the run's final state, plus an opt-in runtime check."
 tags: [epic-1]
-timestamp: 2026-08-19T16:00:00Z
+timestamp: 2026-08-19T21:30:00Z
 epic: 1
 issue: 10
 slug: replay-equivalence-invariant
 size: M
-status: open
+status: in-progress
 gh_issue: 14
 resource: https://github.com/kern-ia/kern-orch/issues/14
 depends_on: [6, 8, 9]

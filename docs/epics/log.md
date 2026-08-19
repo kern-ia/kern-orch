@@ -29,3 +29,5 @@
 * **Update**: Issue 12 (#23, PR #28) merged into `dev`; issue closed.
 * **Update**: Issue 09 (#13, nested subgraph journals) started on `feature/nested-subgraph-journals`.
 * **Update**: Issue 09 (#13, nested subgraph journals) implemented on `feature/nested-subgraph-journals`; PR #29 open against `dev`.
+* **Update**: Issue 06 (#10, PR #26) and issue 09 (#13, PR #29) merged into `dev`; issues closed.
+* **Update**: Issue 10 (#14, replay equivalence over real engine runs) started on `feature/replay-equivalence`.
