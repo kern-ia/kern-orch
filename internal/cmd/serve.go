@@ -42,6 +42,10 @@ type preparedRun struct {
 	reporter         *report.HTTPReporter
 	activity         *activityRelay
 	activityReporter *report.ActivityReporter
+	// equivalenceCheck carries cfg.RuntimeEquivalenceCheck (issue 13) through to run, which
+	// is where the hook chain is built. It is a bool rather than the whole Config so that
+	// run's signature keeps naming only what it uses.
+	equivalenceCheck bool
 }
 
 // prepareRun builds the graph and wires every reporter run/resume/the daemon share. It
@@ -78,6 +82,7 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 	return &preparedRun{
 		graph: g, graphPath: graphPath, name: name, requester: requester, dossier: dossier, mailbox: mailbox,
 		reporter: reporter, activity: activity, activityReporter: activityReporter,
+		equivalenceCheck: cfg.RuntimeEquivalenceCheck,
 	}, nil
 }
 
@@ -106,6 +111,12 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 	steps := &stepCounter{}
 	hook := multiStep(
 		checkpointHook(recorder, p.graphPath, p.requester, p.dossier),
+		// equivalenceCheckHook is issue 13's opt-in check: it re-reads the journal
+		// checkpointHook just wrote and compares its projection to the live state below,
+		// so it must run after checkpointHook — the events it reads have to exist yet. It
+		// returns nil (skipped by multiStep) when the check is off, so the disabled case
+		// costs the run nothing here, not even a call.
+		equivalenceCheckHook(p.equivalenceCheck, store, runID),
 		steps.count,
 		// reportHook is issue 11's rewiring: the reporter's own StepFunc now flattens the
 		// state the journal projects to, read back from the same store checkpointHook just
@@ -510,6 +521,7 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dos
 	return &preparedRun{
 		graph: g, graphPath: "", name: skillName, requester: requester, dossier: dossier, mailbox: mailbox,
 		reporter: reporter, activity: activity, activityReporter: activityReporter,
+		equivalenceCheck: cfg.RuntimeEquivalenceCheck,
 	}, nil
 }
 
@@ -642,7 +654,10 @@ func newServeCmd() *cobra.Command {
 		Short: "Run kern-orch as a long-lived service, accepting runs over HTTP",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.FromEnv()
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
 
 			if err := checkServeExposure(cfg.ServeAddr, cfg.ServeToken); err != nil {
 				return err

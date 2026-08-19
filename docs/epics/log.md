@@ -36,3 +36,6 @@
 * **Update**: Issue 10 (#14, PR #30) merged into `dev`; issue closed.
 * **Update**: Issue 11 (#15, rewire the reporter to project the journal) started on `feature/reporter-consumes-journal`.
 * **Update**: Issue 11 (#15, rewire the reporter to project the journal) implemented on `feature/reporter-consumes-journal`; PR #31 open against `dev`. `internal/report` has zero diff; the rewiring lives entirely in `internal/cmd` (`reportHook`, `journalRecorder.flush` for nested runs).
+* **Update**: Issue 11 (#15, PR #31) merged into `dev`; issue closed. (Reconciled during issue 13's run — status had not been updated after merge.)
+* **Update**: Issue 13 (#24, opt-in runtime replay-equivalence check) started on `feature/runtime-equivalence-check`.
+* **Update**: Issue 13 (#24, opt-in runtime replay-equivalence check) implemented on `feature/runtime-equivalence-check`; PR #32 open against `dev`. Wires issue 10's own comparison (full-state JSON encoding) into a `Config.RuntimeEquivalenceCheck` field, off by default; enabled it names the divergent keys, disabled it adds zero projection calls (proven by call-count instrumentation, not timing). `FromEnv()` now returns `(Config, error)` so an invalid value fails loud at load. This is the epic's last issue — Epic 1 has no more open issues once this merges.

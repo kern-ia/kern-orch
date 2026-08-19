@@ -17,7 +17,10 @@ func newRunCmd() *cobra.Command {
 		Short: "Run a graph from its YAML topology",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg := config.FromEnv()
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
 			graphPath, err := filepath.Abs(args[0])
 			if err != nil {
 				return err
@@ -64,7 +67,10 @@ func newResumeCmd() *cobra.Command {
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runID := args[0]
-			cfg := config.FromEnv()
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
 			store, err := openStore(cfg)
 			if err != nil {
 				return err
@@ -118,7 +124,10 @@ func newStatusCmd() *cobra.Command {
 		Short: "Show status of runs",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.FromEnv()
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
 			store, err := openStore(cfg)
 			if err != nil {
 				return err
@@ -180,7 +189,10 @@ func newPublishSkillsCmd() *cobra.Command {
 		Short: "Publish the skills catalogue to the configured sink (kern.registry/v1)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg := config.FromEnv()
+			cfg, err := config.FromEnv()
+			if err != nil {
+				return err
+			}
 			if cfg.RegistryReportURL == "" {
 				fmt.Fprintf(cmd.OutOrStdout(),
 					"no sink configured: set %s to publish the catalogue\n",
@@ -198,7 +210,13 @@ func newPublishSkillsCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVar(&dir, "skills-dir", config.FromEnv().SkillsDir,
+	// Only SkillsDir is read here, so an invalid value for an unrelated variable (e.g.
+	// EnvRuntimeEquivalenceCheck) is deliberately not fatal at this flag-default call —
+	// RunE above calls FromEnv again and fails loud there, on the path that actually runs
+	// the command; a bad default here would abort `publish-skills --help` for a variable
+	// this command never reads.
+	defaultDir, _ := config.FromEnv()
+	c.Flags().StringVar(&dir, "skills-dir", defaultDir.SkillsDir,
 		"directory containing skill subdirectories")
 	return c
 }
