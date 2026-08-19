@@ -3,12 +3,12 @@ type: Issue
 title: "Emit per-node and level-boundary events from the engine"
 description: "The engine reports node starts, outcomes and level boundaries through a port, at the grain decision 03 chose."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T14:35:00Z
 epic: 1
 issue: 05
 slug: engine-event-emission
 size: M
-status: open
+status: in-progress
 gh_issue: 9
 resource: https://github.com/kern-ia/kern-orch/issues/9
 depends_on: [2]

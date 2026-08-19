@@ -1,10 +1,10 @@
 # Issues — Epic 1: Event journal as the source of truth
 
 * [Add a monotonic SQLite schema version and refuse unknown versions](./01-sqlite-schema-versioning.md) - S, done (#5, PR #17)
-* [Define the internal journal event vocabulary](./02-journal-event-vocabulary.md) - S, pr-open (#6, PR #18)
+* [Define the internal journal event vocabulary](./02-journal-event-vocabulary.md) - S, done (#6, PR #18)
 * [Persist and read the journal in SQLite](./03-journal-store-append-read.md) - M, open (#7)
 * [Project a run state by replaying its journal](./04-state-projection-from-events.md) - M, open (#8)
-* [Emit per-node and level-boundary events from the engine](./05-engine-event-emission.md) - M, open (#9)
+* [Emit per-node and level-boundary events from the engine](./05-engine-event-emission.md) - M, in-progress (#9)
 * [Record nudge, freeze and the combination rule as events](./06-non-node-mutations-as-events.md) - M, open (#10)
 * [Write the journal and the projection cache in one transaction](./07-atomic-journal-and-projection.md) - M, open (#11)
 * [Resume by replaying the journal, closing an interrupted tail](./08-replay-based-resume.md) - M, open (#12)
