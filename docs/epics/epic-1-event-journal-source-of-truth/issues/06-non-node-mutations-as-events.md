@@ -3,7 +3,7 @@ type: Issue
 title: "Record nudge, freeze and the combination rule as events"
 description: "The three state mutations that no node performs become first-class events, which is what gives the invariant meaning."
 tags: [epic-1]
-timestamp: 2026-08-19T20:00:00Z
+timestamp: 2026-08-19T21:30:00Z
 epic: 1
 issue: 06
 slug: non-node-mutations-as-events

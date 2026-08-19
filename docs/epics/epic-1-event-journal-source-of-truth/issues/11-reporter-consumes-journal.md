@@ -3,12 +3,12 @@ type: Issue
 title: "Rewire the reporter to project the journal"
 description: "internal/report becomes a projection of the journal instead of a parallel observer, with its wire format and fixtures untouched."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T22:00:00Z
 epic: 1
 issue: 11
 slug: reporter-consumes-journal
 size: M
-status: open
+status: in-progress
 gh_issue: 15
 resource: https://github.com/kern-ia/kern-orch/issues/15
 depends_on: [7]

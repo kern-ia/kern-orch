@@ -31,3 +31,7 @@
 * **Update**: Issue 09 (#13, nested subgraph journals) implemented on `feature/nested-subgraph-journals`; PR #29 open against `dev`.
 * **Update**: Issue 06 (#10, non-node mutations as events) implemented on `feature/non-node-mutations-as-events`; PR #26 merged into `dev`; issue closed.
 * **Update**: Issue 09 (#13, PR #29) merged into `dev`; issue closed.
+* **Update**: Issue 10 (#14, replay equivalence over real engine runs) started on `feature/replay-equivalence`.
+* **Update**: Issue 10 (#14, replay equivalence over real engine runs) implemented on `feature/replay-equivalence`; PR #30 open against `dev`. Test-only: the eight cases are asserted through the engine and the recorder, and each is proven non-vacuous by a named mutation.
+* **Update**: Issue 10 (#14, PR #30) merged into `dev`; issue closed.
+* **Update**: Issue 11 (#15, rewire the reporter to project the journal) started on `feature/reporter-consumes-journal`.

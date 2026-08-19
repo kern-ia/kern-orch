@@ -3,7 +3,7 @@ type: Issue
 title: "Give each nested subgraph run its own journal"
 description: "A subgraph writes its own journal linked by parent run id and node id, mirroring the reporting decision already made."
 tags: [epic-1]
-timestamp: 2026-08-19T20:00:00Z
+timestamp: 2026-08-19T21:30:00Z
 epic: 1
 issue: 09
 slug: nested-subgraph-journals

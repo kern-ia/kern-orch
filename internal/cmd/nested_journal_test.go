@@ -167,7 +167,10 @@ func TestParentExampleGraphWritesAParentJournalAndAChildJournal(t *testing.T) {
 		t.Fatalf("newJournalRecorder: %v", err)
 	}
 	engine := graph.NewEngine(g).OnEvent(multiEvent(parentRec.record))
-	if err := engine.Run(context.Background(), graph.NewState()); err != nil {
+	// Kept rather than passed inline: the parent's own final state is one half of the
+	// replay-equivalence assertion at the end of this test.
+	parentLive := graph.NewState()
+	if err := engine.Run(context.Background(), parentLive); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 
@@ -214,4 +217,12 @@ func TestParentExampleGraphWritesAParentJournalAndAChildJournal(t *testing.T) {
 			t.Fatalf("%s: replayed state n = %v (%T) (ok %t), want 6 — seed(3) doubled by the child", tc.name, n, n, ok)
 		}
 	}
+
+	// Replay equivalence for the nesting case, on the only side of it a caller can observe:
+	// the parent's journal against the parent's live state. What the child merged back is
+	// part of that state, so this also covers the boundary — the subgraph node is one node
+	// of one parent level, and its whole sub-run reaches the parent journal as that node's
+	// production. The child's own live state stays inside SubgraphNode and never leaves it,
+	// which is why the child journal is checked by value above rather than compared here.
+	assertReplayEquivalent(t, st, parentRunID, parentLive)
 }

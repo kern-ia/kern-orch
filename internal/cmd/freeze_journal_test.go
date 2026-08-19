@@ -6,7 +6,6 @@ import (
 
 	"github.com/yoann/kern-orch/internal/checkpoint"
 	"github.com/yoann/kern-orch/internal/graph"
-	"github.com/yoann/kern-orch/internal/journal/projection"
 	"github.com/yoann/kern-orch/internal/steer"
 )
 
@@ -15,7 +14,22 @@ import (
 // nudge — and returns the store the run wrote to. This is the seam issue 07's drift record
 // used to prove nudge was lost before it went through the recorder; the same seam is what
 // this issue's acceptance criteria need proven for freeze.
+//
+// It fails the test when the run does. A case that expects the engine to refuse the run
+// calls recordRun instead, so that refusal stays observable rather than fatal.
 func runThroughRecorder(t *testing.T, g *graph.Graph, s *graph.State, mailbox *steer.Mailbox) *checkpoint.SQLiteStore {
+	t.Helper()
+	st, err := recordRun(t, g, s, mailbox)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return st
+}
+
+// recordRun is runThroughRecorder without the verdict: it hands back the run's error rather
+// than failing on it, because "the engine refuses this run" is itself one of the facts the
+// equivalence suite asserts (see the freeze-inside-a-fan-out case).
+func recordRun(t *testing.T, g *graph.Graph, s *graph.State, mailbox *steer.Mailbox) (*checkpoint.SQLiteStore, error) {
 	t.Helper()
 	st := openRecorderStore(t)
 	ctx := context.Background()
@@ -32,25 +46,7 @@ func runThroughRecorder(t *testing.T, g *graph.Graph, s *graph.State, mailbox *s
 			return rec.recordNudge(ctx, mailbox.DrainNudges(s))
 		})
 	}
-	if err := eng.Run(ctx, s); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	return st
-}
-
-// projectedState replays run-1's stored journal and returns the state it describes, for
-// comparison against the live state the engine left behind.
-func projectedState(t *testing.T, st *checkpoint.SQLiteStore) *graph.State {
-	t.Helper()
-	events, err := st.Read(context.Background(), "run-1")
-	if err != nil {
-		t.Fatalf("Read: %v", err)
-	}
-	want, err := projection.Project(events)
-	if err != nil {
-		t.Fatalf("Project: %v", err)
-	}
-	return want
+	return st, eng.Run(ctx, s)
 }
 
 // A run that freezes with the default carry-over — drops ephemeral, keeps persistent —
@@ -75,11 +71,7 @@ func TestAFreezeWithTheDefaultCarryOverReplaysExactly(t *testing.T) {
 	if s.Has("scratch") {
 		t.Fatalf("live state kept the ephemeral key past the freeze: %v", s.Keys())
 	}
-	got := recorderStateJSON(t, projectedState(t, st))
-	want := recorderStateJSON(t, s)
-	if got != want {
-		t.Fatalf("Project(events) = %s, want the live state %s", got, want)
-	}
+	assertReplayEquivalent(t, st, "run-1", s)
 }
 
 // The acceptance criterion the epic's Notes single out by name: a run that freezes with a
@@ -124,11 +116,7 @@ func TestAFreezeWithANonDefaultCarryOverReplaysExactly(t *testing.T) {
 	if s.Has("irrelevant") {
 		t.Fatalf("live state kept a key the custom carry-over never named: %v", s.Keys())
 	}
-	got := recorderStateJSON(t, projectedState(t, st))
-	want := recorderStateJSON(t, s)
-	if got != want {
-		t.Fatalf("Project(events) = %s, want the live state %s", got, want)
-	}
+	assertReplayEquivalent(t, st, "run-1", s)
 }
 
 // A run that was nudged between two levels replays to exactly the live state — the
@@ -155,9 +143,5 @@ func TestARunThatWasNudgedReplaysExactly(t *testing.T) {
 	if v, _ := s.Get("probe"); v != "hello" {
 		t.Fatalf("live state probe = %v, want hello — the nudge never reached the run", v)
 	}
-	got := recorderStateJSON(t, projectedState(t, st))
-	want := recorderStateJSON(t, s)
-	if got != want {
-		t.Fatalf("Project(events) = %s, want the live state %s", got, want)
-	}
+	assertReplayEquivalent(t, st, "run-1", s)
 }
