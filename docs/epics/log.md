@@ -23,5 +23,9 @@
 * **Update**: Issues 08 and 10 narrowed and split — issue 12 (#23, interrupted-tail closing) and issue 13 (#24, opt-in runtime equivalence check) created. Six of six issues so far overshot their size band because the no-table-driven-tests convention makes tests two to three times the implementation; the remaining work is cut finer to compensate.
 
 * **Update**: Issue 08 (#12, replay-based resume) implemented on `feature/replay-based-resume`; PR #27 open against `dev`.
+* **Update**: Issue 08 (#12, PR #27) merged into `dev`; issue closed.
+* **Update**: Issue 12 (#23, interrupted tail closing) started on `feature/interrupted-tail-closing`.
+* **Update**: Issue 12 (#23, interrupted tail closing) implemented on `feature/interrupted-tail-closing`; PR #28 open against `dev`. Both interruption shapes are closed — the hard kill mid-level and the stop path issue 08 found, where the terminal events are refused on the run's own cancelled context.
+* **Update**: Issue 12 (#23, PR #28) merged into `dev`; issue closed.
 * **Update**: Issue 09 (#13, nested subgraph journals) started on `feature/nested-subgraph-journals`.
 * **Update**: Issue 09 (#13, nested subgraph journals) implemented on `feature/nested-subgraph-journals`; PR #29 open against `dev`.

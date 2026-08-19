@@ -15,8 +15,9 @@ import (
 // is not a state that run ever held: it is the absence of a record. Resuming from it would
 // run the remaining frontier against nothing, and every node downstream would read blanks
 // where a value stood, with no error anywhere to say so. Distinct from an unknown run, which
-// is simply absent, and from an interrupted tail, which is a journal that stops early rather
-// than one that never existed (issue 12).
+// is simply absent, and from an interrupted tail — a journal that stops early rather than one
+// that never existed, which resume closes and continues (closeInterruptedTail) rather than
+// refuses. Nothing can be reconstructed from no record at all; a record that stops has one.
 var ErrNoJournal = errors.New("checkpoint: run has no journal")
 
 // ResumePoint is where a run is picked up again: the state to continue from, the frontier to
@@ -50,6 +51,9 @@ type ResumePoint struct {
 // The row is still read, for the provenance the journal does not carry — the graph path above
 // all, which is what lets `resume <run-id>` take no graph argument — and for the next frontier
 // in the one case the journal cannot name it. Its state is read by nothing.
+//
+// It writes, despite its name: a journal carrying no terminal event gains one here, because
+// resume is the moment the interruption stops being a guess. See closeInterruptedTail.
 func (s *SQLiteStore) ResumePoint(ctx context.Context, runID string) (ResumePoint, bool, error) {
 	rec, ok, err := s.Latest(ctx, runID)
 	if err != nil || !ok {
@@ -68,6 +72,25 @@ func (s *SQLiteStore) ResumePoint(ctx context.Context, runID string) (ResumePoin
 	replayed, err := projection.Replay(events)
 	if err != nil {
 		return ResumePoint{}, false, fmt.Errorf("checkpoint: replay run %q to resume it: %w", runID, err)
+	}
+	if replayed.ClosedBy == "" {
+		// A journal with no terminal event is a record of a run nobody closed, and resume is
+		// the moment that becomes a settled fact: the process that could have written the
+		// ending is gone, and this one is about to append a second attempt after it. Left
+		// implicit, the two attempts would run together in the record with no boundary.
+		//
+		// This is why a read-shaped call writes. The alternative — a separate exported
+		// method the two resume entry points each remember to call — was rejected: they go
+		// through ResumePoint precisely so the CLI and the daemon cannot drift, and a step
+		// one of them could forget is a step one of them eventually will.
+		if events, err = s.closeInterruptedTail(ctx, runID, events, replayed); err != nil {
+			return ResumePoint{}, false, err
+		}
+		// Replayed again over the closed journal rather than patched in memory, so the
+		// frontier this returns is derived from what the table now holds.
+		if replayed, err = projection.Replay(events); err != nil {
+			return ResumePoint{}, false, fmt.Errorf("checkpoint: replay run %q after closing its interrupted tail: %w", runID, err)
+		}
 	}
 	return ResumePoint{
 		RunID:     runID,
