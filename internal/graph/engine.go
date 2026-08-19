@@ -245,6 +245,18 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 				results[i].emitErr = e.emit(ctx, Event{Kind: EventNodeFailed, NodeID: id, Err: wrapped})
 				return
 			}
+			// s.Frozen is read-only here (only written after wg.Wait), so comparing it
+			// against the branch's own counter is safe across every node's goroutine. A
+			// freeze inside a fan-out has no single branch to attribute it to — Merge does
+			// not fold Frozen or dropped keys either — so it fails the node rather than
+			// producing an event replay would refuse: a run this rejects live must never
+			// leave behind a journal that only replay discovers is unreplayable.
+			if branch.Frozen != s.Frozen && len(frontier) > 1 {
+				wrapped := fmt.Errorf("node %q: graph.State.Freeze called inside a %d-node fan-out level, which has no single branch to attribute the freeze to", id, len(frontier))
+				results[i] = outcome{id: id, err: wrapped}
+				results[i].emitErr = e.emit(ctx, Event{Kind: EventNodeFailed, NodeID: id, Err: wrapped})
+				return
+			}
 			var route []string
 			if r, ok := e.g.routes[id]; ok {
 				route = r(branch)
@@ -253,10 +265,19 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 			// Reading s while the level runs is safe: the shared state is only written after
 			// wg.Wait, so every branch diffs against the same frozen starting point.
 			if e.onEvent != nil {
-				data, zones := producedKeys(s, branch)
-				results[i].emitErr = e.emit(ctx, Event{
-					Kind: EventNodeProduced, NodeID: id, Data: data, Zones: zones,
-				})
+				if branch.Frozen != s.Frozen {
+					// A wholesale replacement, not a diff: see freezeDiff and
+					// EventFreezeApplied's doc on Event.
+					carried, dropped := freezeDiff(s, branch)
+					results[i].emitErr = e.emit(ctx, Event{
+						Kind: EventFreezeApplied, NodeID: id, CarriedOver: carried, Dropped: dropped,
+					})
+				} else {
+					data, zones := producedKeys(s, branch)
+					results[i].emitErr = e.emit(ctx, Event{
+						Kind: EventNodeProduced, NodeID: id, Data: data, Zones: zones,
+					})
+				}
 			}
 		}(i, id, node)
 	}
