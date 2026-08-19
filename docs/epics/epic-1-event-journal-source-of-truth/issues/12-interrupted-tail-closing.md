@@ -3,13 +3,14 @@ type: Issue
 title: "Close an interrupted run's tail with synthetic events"
 description: "A run killed mid-level leaves a level opened and never closed; turn that hole into explicit, identifiable facts."
 tags: [epic-1]
-timestamp: 2026-08-19T21:05:00Z
+timestamp: 2026-08-19T21:30:00Z
 epic: 1
 issue: 12
 slug: interrupted-tail-closing
 size: M
-status: in-progress
+status: pr-open
 gh_issue: 23
+gh_pr: 28
 resource: https://github.com/kern-ia/kern-orch/issues/23
 depends_on: [8]
 ---

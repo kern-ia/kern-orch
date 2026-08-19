@@ -11,5 +11,5 @@
 * [Give each nested subgraph run its own journal](./09-nested-subgraph-journals.md) - S, open (#13)
 * [Assert replay equivalence over real engine runs](./10-replay-equivalence-invariant.md) - M, open (#14)
 * [Rewire the reporter to project the journal](./11-reporter-consumes-journal.md) - M, open (#15)
-* [Close an interrupted run's tail with synthetic events](./12-interrupted-tail-closing.md) - M, in-progress (#23)
+* [Close an interrupted run's tail with synthetic events](./12-interrupted-tail-closing.md) - M, pr-open (#23, PR #28)
 * [Opt-in runtime replay-equivalence check](./13-runtime-equivalence-check.md) - S, open (#24)

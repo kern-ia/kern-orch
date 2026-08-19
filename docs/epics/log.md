@@ -25,3 +25,4 @@
 * **Update**: Issue 08 (#12, replay-based resume) implemented on `feature/replay-based-resume`; PR #27 open against `dev`.
 * **Update**: Issue 08 (#12, PR #27) merged into `dev`; issue closed.
 * **Update**: Issue 12 (#23, interrupted tail closing) started on `feature/interrupted-tail-closing`.
+* **Update**: Issue 12 (#23, interrupted tail closing) implemented on `feature/interrupted-tail-closing`; PR #28 open against `dev`. Both interruption shapes are closed — the hard kill mid-level and the stop path issue 08 found, where the terminal events are refused on the run's own cancelled context.
