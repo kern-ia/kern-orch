@@ -3,12 +3,12 @@ type: Issue
 title: "Opt-in runtime replay-equivalence check"
 description: "Expose the projection-versus-replay comparison as a validated Config field, off by default."
 tags: [epic-1]
-timestamp: 2026-08-19T16:00:00Z
+timestamp: 2026-08-19T16:30:00Z
 epic: 1
 issue: 13
 slug: runtime-equivalence-check
 size: S
-status: open
+status: in-progress
 gh_issue: 24
 resource: https://github.com/kern-ia/kern-orch/issues/24
 depends_on: [10]

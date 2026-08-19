@@ -3,7 +3,11 @@
 // these defaults.
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
 
 // Environment variable names.
 const (
@@ -52,6 +56,18 @@ const (
 	// ingestion channel, same "text IS the document path" convention as a chat command or
 	// courtage-extraction's Telegram listener already use.
 	EnvUploadDir = "KERN_ORCH_UPLOAD_DIR"
+
+	// EnvRuntimeEquivalenceCheck turns on, at every level boundary, a comparison of the
+	// journal's projection against the live state the engine is carrying forward (issue 10's
+	// assertReplayEquivalent, wired for a live run instead of a test). It is its own variable
+	// rather than folded into an existing one because it is a diagnostic for one class of bug
+	// only — a divergence introduced in code (the emission sites, the projection), not one
+	// carried by a run's actual data — so it must be flippable per deployment, and per run if
+	// a run is under suspicion, without touching the other sinks or the checkpoint path at
+	// all. Off by default: it doubles the state work of every level of every run, which is
+	// too costly to pay by default to defend against a class of bug the epic's own tests
+	// (issue 10) already prove does not hold in the general case.
+	EnvRuntimeEquivalenceCheck = "KERN_RUNTIME_EQUIVALENCE_CHECK"
 )
 
 // Config is the resolved runtime configuration.
@@ -82,25 +98,39 @@ type Config struct {
 
 	// UploadDir is where an uploaded document is saved.
 	UploadDir string
+
+	// RuntimeEquivalenceCheck turns on the opt-in replay-equivalence check at every level
+	// boundary; false (the default) means the run pays no extra projection cost at all — see
+	// EnvRuntimeEquivalenceCheck for why it defaults off and is its own variable.
+	RuntimeEquivalenceCheck bool
 }
 
-// FromEnv builds a Config from the environment, applying defaults for unset variables.
-func FromEnv() Config {
-	return Config{
-		SkillsDir:         envOr(EnvSkillsDir, "skills"),
-		CustomSkillsDir:   envOr(EnvSkillsCustomDir, "skills-custom"),
-		CheckpointDB:      envOr(EnvCheckpointDB, "./data/kern-orch.db"),
-		AgentCLI:          os.Getenv(EnvAgentCLI),
-		StepReportURL:     os.Getenv(EnvStepReportURL),
-		RegistryReportURL: os.Getenv(EnvRegistryReportURL),
-		ActivityReportURL: os.Getenv(EnvActivityReportURL),
-		SinkToken:         os.Getenv(EnvSinkToken),
-		ServeAddr:         envOr(EnvServeAddr, "127.0.0.1:7070"),
-		ServeToken:        os.Getenv(EnvServeToken),
-		TelegramBotToken:  os.Getenv(EnvTelegramBotToken),
-		TelegramChatID:    os.Getenv(EnvTelegramChatID),
-		UploadDir:         envOr(EnvUploadDir, "./data/uploads"),
+// FromEnv builds a Config from the environment, applying defaults for unset variables. It
+// returns an error rather than falling back to a default when a variable is set to a value
+// that cannot be parsed — RuntimeEquivalenceCheck is the first field this applies to — per
+// CONVENTIONS.md's "misconfiguration fails loud".
+func FromEnv() (Config, error) {
+	equivalenceCheck, err := boolEnvOr(EnvRuntimeEquivalenceCheck, false)
+	if err != nil {
+		return Config{}, err
 	}
+
+	return Config{
+		SkillsDir:               envOr(EnvSkillsDir, "skills"),
+		CustomSkillsDir:         envOr(EnvSkillsCustomDir, "skills-custom"),
+		CheckpointDB:            envOr(EnvCheckpointDB, "./data/kern-orch.db"),
+		AgentCLI:                os.Getenv(EnvAgentCLI),
+		StepReportURL:           os.Getenv(EnvStepReportURL),
+		RegistryReportURL:       os.Getenv(EnvRegistryReportURL),
+		ActivityReportURL:       os.Getenv(EnvActivityReportURL),
+		SinkToken:               os.Getenv(EnvSinkToken),
+		ServeAddr:               envOr(EnvServeAddr, "127.0.0.1:7070"),
+		ServeToken:              os.Getenv(EnvServeToken),
+		TelegramBotToken:        os.Getenv(EnvTelegramBotToken),
+		TelegramChatID:          os.Getenv(EnvTelegramChatID),
+		UploadDir:               envOr(EnvUploadDir, "./data/uploads"),
+		RuntimeEquivalenceCheck: equivalenceCheck,
+	}, nil
 }
 
 func envOr(key, def string) string {
@@ -108,4 +138,20 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// boolEnvOr parses key as a bool, returning def when it is unset. An empty value is treated
+// as unset (consistent with envOr above) rather than as a parse failure, but any other value
+// strconv.ParseBool rejects is reported to the caller instead of silently becoming def — a
+// typo in the variable's value must not be read as "check disabled".
+func boolEnvOr(key string, def bool) (bool, error) {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return def, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("config: %s: invalid boolean value %q: %w", key, v, err)
+	}
+	return b, nil
 }
