@@ -48,7 +48,7 @@ type Event struct {
 	Seq   int64     `json:"seq"`
 	At    time.Time `json:"at"`
 	// Synthetic marks an event nobody observed: it was reconstructed after the fact, by a
-	// reader closing a record the writer never got to close (internal/checkpoint, issue 12).
+	// reader closing a record the writer never got to close (checkpoint.closeInterruptedTail).
 	// It is provenance, not content, which is why it sits on the envelope rather than in a
 	// field of every payload that could be reconstructed — and why it is one flag rather
 	// than a second Kind: a synthetic RunInterrupted says the same thing about the run as a

@@ -10,8 +10,10 @@
 // import graph back).
 //
 // Project is pure: it takes an ordered slice and returns a state. Reading events out of
-// SQLite is the caller's job (issue 07) and closing an interrupted tail is issue 12's; a
-// projection that also did I/O could not be exhaustively tested before either exists.
+// SQLite is the caller's job (issue 07), and so is closing an interrupted tail
+// (checkpoint.closeInterruptedTail) — Replay tolerates an unclosed tail rather than deciding
+// what to do about it, because only a writer can decide that. A projection that also did I/O
+// could not be exhaustively tested before either exists.
 //
 // # What replay cannot re-derive, and therefore reads off the events
 //
