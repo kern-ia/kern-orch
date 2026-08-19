@@ -8,7 +8,7 @@
 * [Record nudge, freeze and the combination rule as events](./06-non-node-mutations-as-events.md) - M, pr-open (#10, PR #26)
 * [Write the journal and the projection cache in one transaction](./07-atomic-journal-and-projection.md) - M, done (#11, PR #22)
 * [Resume by replaying the journal](./08-replay-based-resume.md) - M, pr-open (#12, PR #27)
-* [Give each nested subgraph run its own journal](./09-nested-subgraph-journals.md) - S, in-progress (#13)
+* [Give each nested subgraph run its own journal](./09-nested-subgraph-journals.md) - S, pr-open (#13, PR #29)
 * [Assert replay equivalence over real engine runs](./10-replay-equivalence-invariant.md) - M, open (#14)
 * [Rewire the reporter to project the journal](./11-reporter-consumes-journal.md) - M, open (#15)
 * [Close an interrupted run's tail with synthetic events](./12-interrupted-tail-closing.md) - M, open (#23)

@@ -24,3 +24,4 @@
 
 * **Update**: Issue 08 (#12, replay-based resume) implemented on `feature/replay-based-resume`; PR #27 open against `dev`.
 * **Update**: Issue 09 (#13, nested subgraph journals) started on `feature/nested-subgraph-journals`.
+* **Update**: Issue 09 (#13, nested subgraph journals) implemented on `feature/nested-subgraph-journals`; PR #29 open against `dev`.

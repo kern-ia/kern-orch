@@ -3,13 +3,14 @@ type: Issue
 title: "Give each nested subgraph run its own journal"
 description: "A subgraph writes its own journal linked by parent run id and node id, mirroring the reporting decision already made."
 tags: [epic-1]
-timestamp: 2026-08-19T14:00:00Z
+timestamp: 2026-08-19T14:30:00Z
 epic: 1
 issue: 09
 slug: nested-subgraph-journals
 size: S
-status: in-progress
+status: pr-open
 gh_issue: 13
+gh_pr: 29
 resource: https://github.com/kern-ia/kern-orch/issues/13
 depends_on: [5, 7]
 ---
