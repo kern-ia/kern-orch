@@ -3,13 +3,14 @@ type: Issue
 title: "Add a monotonic SQLite schema version and refuse unknown versions"
 description: "Replace the ad-hoc ALTER TABLE with a real schema_version mechanism that fails loud on a database this build does not understand."
 tags: [epic-1]
-timestamp: 2026-08-19T12:20:00Z
+timestamp: 2026-08-19T12:45:00Z
 epic: 1
 issue: 01
 slug: sqlite-schema-versioning
 size: S
-status: in-progress
+status: pr-open
 gh_issue: 5
+gh_pr: 17
 resource: https://github.com/kern-ia/kern-orch/issues/5
 depends_on: []
 ---
