@@ -286,21 +286,65 @@ func failedNodes(err error) []string {
 	return nil
 }
 
-// nestedRuns wires every subgraph node so its nested graph reports as a run of its own,
-// pointing back at the node it belongs to.
+// nestedRuns wires every subgraph node so its nested graph reports and journals as a run of
+// its own, pointing back at the node it belongs to.
 //
-// Each execution gets a fresh run id: the same node running twice — a retry, a loop — is
-// two nested runs, not one run reported twice. The shape is read from the file the loader
-// resolved; a graph built in Go carries no file and travels without a topology, exactly as
-// an undeclared parent would.
-func nestedRuns(reg *topology.Registry, reporter *report.HTTPReporter, parentRun string) {
-	if !reporter.Enabled() {
-		return
+// Each execution gets a fresh run id: the same node running twice — a retry, a loop — is two
+// nested runs, not one run reported or journalled twice. Reporting and journalling share
+// that id (graph.WithChildRun mints it once and hands both hooks the same value) rather than
+// minting it twice, so a consumer correlating the two never has to guess which report goes
+// with which journal. The shape reported is read from the file the loader resolved; a graph
+// built in Go carries no file and travels without a topology, exactly as an undeclared
+// parent would.
+//
+// Reporting stays gated on the reporter being configured, as it always was. Journalling is
+// not: the journal is this codebase's source of truth (see the package doc on cmd), so a
+// nested run gets one whenever cfg's checkpoint store can be opened at all, with no separate
+// switch to leave off by accident.
+func nestedRuns(reg *topology.Registry, reporter *report.HTTPReporter, cfg config.Config, parentRun string) {
+	reg.OnChildRun(buildChildRunHooks(reporter, cfg, parentRun))
+}
+
+// buildChildRunHooks is nestedRuns' factory, split out so it can be exercised directly: the
+// only way to reach it through reg.OnChildRun is by building and running a real graph, which
+// would make every case here — the fresh id per call, journalling without a reporter, best-
+// effort degradation when the store cannot open — an integration test when each is a fact
+// about this one function.
+func buildChildRunHooks(reporter *report.HTTPReporter, cfg config.Config, parentRun string) func(nodeID, graphRef string) *graph.ChildRunHooks {
+	return func(nodeID, graphRef string) *graph.ChildRunHooks {
+		runID := newRunID()
+		name := graphName(graphRef)
+		hooks := &graph.ChildRunHooks{}
+
+		if reporter.Enabled() {
+			hooks.Step = reporter.NestedHook(runID, name, describeTopology(graphRef),
+				&report.Parent{RunID: parentRun, NodeID: nodeID})
+		}
+
+		// One store connection per execution, closed when the child returns (see
+		// graph.ChildRunHooks.Close) — not one cached for the parent run's whole life. A
+		// long-lived daemon runs many parents over time, and a connection kept open past
+		// the one nested run it served would leak one per subgraph node the daemon ever
+		// sees. A store that cannot be opened, or a recorder that cannot read its next
+		// sequence number, costs this one child its own journal — never the run itself:
+		// the parent's own checkpoint already captures the whole sub-run as one atomic
+		// step (see subgraph.go's SubgraphNode doc), so this is additive record-keeping,
+		// best-effort like describeTopology just above.
+		if s, err := openStore(cfg); err == nil {
+			hooks.Close = func() { _ = s.Close() }
+			if rec, err := newJournalRecorder(context.Background(), s, runID, name); err == nil {
+				hooks.Event = multiEvent(rec.record)
+			}
+		}
+
+		if hooks.Step == nil && hooks.Event == nil {
+			if hooks.Close != nil {
+				hooks.Close()
+			}
+			return nil
+		}
+		return hooks
 	}
-	reg.OnChildStep(func(nodeID, graphRef string) graph.StepFunc {
-		return reporter.NestedHook(newRunID(), graphName(graphRef), describeTopology(graphRef),
-			&report.Parent{RunID: parentRun, NodeID: nodeID})
-	})
 }
 
 // wireApproval binds a run's mailbox as the decision source for every approval node in

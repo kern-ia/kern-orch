@@ -60,7 +60,7 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 	// Wired before the graph is built, not after: a subgraph node receives its hook at
 	// construction time.
 	reg := builtinRegistry(newRunner(cfg, activity), cfg)
-	nestedRuns(reg, reporter, runID)
+	nestedRuns(reg, reporter, cfg, runID)
 	wireApproval(reg, mailbox, activity)
 
 	g, err := topology.LoadFile(graphPath, reg)

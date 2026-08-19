@@ -169,3 +169,104 @@ func TestASubgraphWithoutAHookStillRuns(t *testing.T) {
 		t.Error("the child did not run")
 	}
 }
+
+// WithChildRun wires both hooks the builder returns onto the nested engine: a reporting
+// StepFunc and a journalling EventFunc, so the child's own record and its wire report cover
+// the same execution.
+func TestSubgraphWithChildRunWiresBothHooks(t *testing.T) {
+	child := NewGraph()
+	child.AddNode(NewToolNode("c1", func(context.Context, *State) error { return nil }))
+	child.SetEntry("c1")
+
+	var steps int
+	var kinds []EventKind
+	node := NewSubgraphNode("nested", child, WithChildRun(
+		func(nodeID, _ string) *ChildRunHooks {
+			if nodeID != "nested" {
+				t.Errorf("the builder was called for %q, want the subgraph node id", nodeID)
+			}
+			return &ChildRunHooks{
+				Step: func(context.Context, StepInfo, *State) error { steps++; return nil },
+				Event: func(_ context.Context, ev Event) error {
+					kinds = append(kinds, ev.Kind)
+					return nil
+				},
+			}
+		},
+	))
+
+	if err := node.Execute(context.Background(), NewState()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if steps == 0 {
+		t.Error("the reporting hook never ran")
+	}
+	if len(kinds) == 0 || kinds[0] != EventRunStarted {
+		t.Fatalf("event kinds = %v, want the first to be EventRunStarted", kinds)
+	}
+}
+
+// The builder runs once per execution, and Execute defers Close until the nested engine has
+// returned — a caller opening a resource per execution (cmd's own store connection) needs
+// that resource to outlive the whole nested run, not just the call that opens it.
+func TestSubgraphWithChildRunClosesAfterTheNestedEngineReturns(t *testing.T) {
+	child := NewGraph()
+	child.AddNode(NewToolNode("c1", func(context.Context, *State) error { return nil }))
+	child.SetEntry("c1")
+
+	var closedBeforeRunEnded bool
+	var runEnded bool
+	node := NewSubgraphNode("nested", child, WithChildRun(
+		func(string, string) *ChildRunHooks {
+			return &ChildRunHooks{
+				Event: func(_ context.Context, ev Event) error {
+					if ev.Kind == EventRunFinished {
+						runEnded = true
+					}
+					return nil
+				},
+				Close: func() {
+					if !runEnded {
+						closedBeforeRunEnded = true
+					}
+				},
+			}
+		},
+	))
+
+	if err := node.Execute(context.Background(), NewState()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if closedBeforeRunEnded {
+		t.Error("Close ran before the nested run's own EventRunFinished — the resource closed too early")
+	}
+	if !runEnded {
+		t.Fatal("the nested run never reported EventRunFinished")
+	}
+}
+
+// The same node executed twice — a retry, a loop — must ask the builder twice, so a caller
+// minting a fresh identity per call (cmd's nestedRuns) gets two distinct nested runs rather
+// than one run journalled twice.
+func TestSubgraphWithChildRunCallsTheBuilderOncePerExecution(t *testing.T) {
+	child := NewGraph()
+	child.AddNode(NewToolNode("c1", func(context.Context, *State) error { return nil }))
+	child.SetEntry("c1")
+
+	calls := 0
+	node := NewSubgraphNode("nested", child, WithChildRun(
+		func(string, string) *ChildRunHooks {
+			calls++
+			return &ChildRunHooks{}
+		},
+	))
+
+	for i := 0; i < 2; i++ {
+		if err := node.Execute(context.Background(), NewState()); err != nil {
+			t.Fatalf("Execute %d: %v", i, err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("the builder ran %d times over two executions, want 2", calls)
+	}
+}

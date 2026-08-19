@@ -22,6 +22,11 @@ type Registry struct {
 	// it decides how a node is built, not what the graph means.
 	childStep func(nodeID, graphRef string) graph.StepFunc
 
+	// childRun builds both hooks a nested run reports and journals through, bound to the
+	// same run id. Takes precedence over childStep when set — a caller wiring the journal
+	// wants reporting to ride the same identity, not a second one minted independently.
+	childRun func(nodeID, graphRef string) *graph.ChildRunHooks
+
 	// approval is the wait function every approval node in this graph blocks on. Uniform
 	// across nodes (unlike childStep) because it is bound to one run's mailbox, not to a
 	// particular node's identity.
@@ -47,6 +52,14 @@ func (r *Registry) Tool(name string, fn graph.ToolFunc) *Registry {
 // returns. Unset, nested runs stay invisible exactly as before.
 func (r *Registry) OnChildStep(build func(nodeID, graphRef string) graph.StepFunc) *Registry {
 	r.childStep = build
+	return r
+}
+
+// OnChildRun makes every subgraph node journal and report its nested run as one, through
+// the hooks build returns. Unset, nested runs are neither journalled nor — unless
+// OnChildStep is also set — reported.
+func (r *Registry) OnChildRun(build func(nodeID, graphRef string) *graph.ChildRunHooks) *Registry {
+	r.childRun = build
 	return r
 }
 
@@ -134,7 +147,10 @@ func build(data []byte, reg *Registry, resolveSub subResolver) (*graph.Graph, er
 				return nil, err
 			}
 			opts := []graph.SubgraphOption{graph.WithGraphRef(ref)}
-			if reg.childStep != nil {
+			switch {
+			case reg.childRun != nil:
+				opts = append(opts, graph.WithChildRun(reg.childRun))
+			case reg.childStep != nil:
 				opts = append(opts, graph.WithChildStep(reg.childStep))
 			}
 			g.AddNode(graph.NewSubgraphNode(n.ID, sub, opts...))
