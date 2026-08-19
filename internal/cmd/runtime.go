@@ -193,6 +193,31 @@ func multiStep(hooks ...graph.StepFunc) graph.StepFunc {
 	}
 }
 
+// multiEvent chains several event hooks into the single one Engine.OnEvent accepts — the
+// same shape multiStep gives OnStep, and for the same reason: the engine offers one seam,
+// and more than one thing will want to watch a run. Hooks run in the order given and the
+// first error aborts the run, so the durable record comes first and best-effort observers
+// last. Nil hooks are skipped, which lets a caller pass a disabled recorder without
+// branching.
+//
+// A hook registered here is called from the per-node goroutines, not only from the run's
+// own — graph.EventFunc says so — so every hook chained here must be safe for concurrent
+// use. multiEvent adds no locking of its own: serializing here would hide the requirement
+// from the hooks that actually hold state, and turn the level's parallelism into a queue.
+func multiEvent(hooks ...graph.EventFunc) graph.EventFunc {
+	return func(ctx context.Context, ev graph.Event) error {
+		for _, hook := range hooks {
+			if hook == nil {
+				continue
+			}
+			if err := hook(ctx, ev); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 // graphName is the label the UI shows for a run: the topology file without its extension.
 func graphName(graphPath string) string {
 	base := filepath.Base(graphPath)
