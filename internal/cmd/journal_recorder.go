@@ -150,6 +150,19 @@ func (r *journalRecorder) take() []journal.Event {
 	return batch
 }
 
+// flush writes whatever is buffered as a plain append, with no projection row of its own.
+//
+// It exists for a nested run's own StepFunc (see runtime.go's nestedFlushHook): a nested run
+// has no checkpoint row (the parent's own checkpoint already captures the whole sub-run as
+// one atomic step, per subgraph.go's SubgraphNode doc), and unlike the top-level run it has
+// no per-level hook that writes one — record only flushes on the run's own terminal event
+// (see closesTheRun). Since issue 11 has the reporter read the journal back to build the
+// state it flattens, a nested run's steps would report against an empty journal for their
+// entire life and only catch up after the run had already finished, without this.
+func (r *journalRecorder) flush(ctx context.Context) error {
+	return r.store.Append(ctx, r.runID, r.take()...)
+}
+
 // closesTheRun reports the kinds emitted outside any level, after the last OnStep hook has
 // fired. They have no row of their own to wait for, so they are written on arrival.
 func closesTheRun(kind graph.EventKind) bool {

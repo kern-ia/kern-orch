@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/yoann/kern-orch/internal/checkpoint"
 	"github.com/yoann/kern-orch/internal/config"
 	"github.com/yoann/kern-orch/internal/graph"
+	"github.com/yoann/kern-orch/internal/journal/projection"
 	"github.com/yoann/kern-orch/internal/notify"
 	"github.com/yoann/kern-orch/internal/report"
 	"github.com/yoann/kern-orch/internal/skills"
@@ -171,6 +173,38 @@ func checkpointHook(rec *journalRecorder, graphPath, requester, dossier string) 
 	return rec.checkpoint(graphPath, requester, dossier)
 }
 
+// reportHook rewires a reporter's own step hook to flatten the journal's projected state
+// instead of the engine's live one — this is issue 11's whole change: internal/report stops
+// observing the run in parallel and becomes a reader of the record. The hook's own signature
+// (StepEvent, flatten, the queue) is untouched; only what the caller hands it as state moves
+// from the engine's *graph.State to Project(store.Read(runID)).
+//
+// It belongs after checkpointHook in the chain (multiStep already orders durability before
+// observers), so the events it reads back have already been written by this same level.
+//
+// A journal that cannot be read or replayed here costs this level's report a line on stderr
+// and nothing else — the same best-effort contract report.HTTPReporter's own package doc
+// already promises for a broken sink, extended to a broken read of the record it now depends
+// on. It must never be the reason a run fails.
+func reportHook(store *checkpoint.SQLiteStore, runID string, hook graph.StepFunc) graph.StepFunc {
+	if hook == nil {
+		return nil
+	}
+	return func(ctx context.Context, info graph.StepInfo, _ *graph.State) error {
+		events, err := store.Read(ctx, runID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "kern-orch: report step %d of run %s: read journal: %v\n", info.Step, runID, err)
+			return nil
+		}
+		state, err := projection.Project(events)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "kern-orch: report step %d of run %s: project journal: %v\n", info.Step, runID, err)
+			return nil
+		}
+		return hook(ctx, info, state)
+	}
+}
+
 // multiStep chains several step hooks into the single one Engine.OnStep accepts. Hooks run
 // in the order given and the first error aborts the run, so durability comes first and
 // best-effort observers last. Nil hooks are skipped, which lets a caller pass a disabled
@@ -314,12 +348,6 @@ func buildChildRunHooks(reporter *report.HTTPReporter, cfg config.Config, parent
 	return func(nodeID, graphRef string) *graph.ChildRunHooks {
 		runID := newRunID()
 		name := graphName(graphRef)
-		hooks := &graph.ChildRunHooks{}
-
-		if reporter.Enabled() {
-			hooks.Step = reporter.NestedHook(runID, name, describeTopology(graphRef),
-				&report.Parent{RunID: parentRun, NodeID: nodeID})
-		}
 
 		// One store connection per execution, closed when the child returns (see
 		// graph.ChildRunHooks.Close) — not one cached for the parent run's whole life. A
@@ -329,21 +357,47 @@ func buildChildRunHooks(reporter *report.HTTPReporter, cfg config.Config, parent
 		// sequence number, costs this one child its own journal — never the run itself:
 		// the parent's own checkpoint already captures the whole sub-run as one atomic
 		// step (see subgraph.go's SubgraphNode doc), so this is additive record-keeping,
-		// best-effort like describeTopology just above.
-		if s, err := openStore(cfg); err == nil {
-			hooks.Close = func() { _ = s.Close() }
-			if rec, err := newJournalRecorder(context.Background(), s, runID, name); err == nil {
-				hooks.Event = multiEvent(rec.record)
-			}
-		}
-
-		if hooks.Step == nil && hooks.Event == nil {
-			if hooks.Close != nil {
-				hooks.Close()
-			}
+		// best-effort like describeTopology below.
+		//
+		// Reporting now needs the store too, and not only journalling: reportHook projects
+		// the state it flattens from this same store (issue 11), so a child whose store
+		// cannot be opened has nothing to derive a step event from either. That is a change
+		// from before this issue, where a live nested run could still report over HTTP with
+		// no journal at all — see this branch's PR body for why that is the right trade.
+		s, err := openStore(cfg)
+		if err != nil {
 			return nil
 		}
+		hooks := &graph.ChildRunHooks{Close: func() { _ = s.Close() }}
+
+		rec, err := newJournalRecorder(context.Background(), s, runID, name)
+		if err != nil {
+			hooks.Close()
+			return nil
+		}
+		hooks.Event = multiEvent(rec.record)
+
+		if reporter.Enabled() {
+			stepHook := reporter.NestedHook(runID, name, describeTopology(graphRef),
+				&report.Parent{RunID: parentRun, NodeID: nodeID})
+			// A nested run has no per-level checkpoint hook the way the top-level run does
+			// (checkpointHook) — record only flushes its own terminal event (closesTheRun),
+			// so without an explicit flush first, reportHook would read back an empty
+			// journal for every level except after the run has already finished. See
+			// journalRecorder.flush.
+			hooks.Step = multiStep(nestedFlushHook(rec), reportHook(s, runID, stepHook))
+		}
+
 		return hooks
+	}
+}
+
+// nestedFlushHook writes a nested run's buffered level events to the store with no
+// projection row, so the reportHook chained right after it (see buildChildRunHooks) reads
+// back a journal that already includes the level that just closed.
+func nestedFlushHook(rec *journalRecorder) graph.StepFunc {
+	return func(ctx context.Context, _ graph.StepInfo, _ *graph.State) error {
+		return rec.flush(ctx)
 	}
 }
 
