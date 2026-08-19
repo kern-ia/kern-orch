@@ -6,7 +6,7 @@
 * [Project a run state by replaying its journal](./04-state-projection-from-events.md) - M, done (#8, PR #20)
 * [Emit per-node and level-boundary events from the engine](./05-engine-event-emission.md) - M, done (#9, PR #21)
 * [Record nudge, freeze and the combination rule as events](./06-non-node-mutations-as-events.md) - M, open (#10)
-* [Write the journal and the projection cache in one transaction](./07-atomic-journal-and-projection.md) - M, in-progress (#11)
+* [Write the journal and the projection cache in one transaction](./07-atomic-journal-and-projection.md) - M, pr-open (#11, PR #22)
 * [Resume by replaying the journal, closing an interrupted tail](./08-replay-based-resume.md) - M, open (#12)
 * [Give each nested subgraph run its own journal](./09-nested-subgraph-journals.md) - S, open (#13)
 * [Enforce replay equivalence as an executed invariant](./10-replay-equivalence-invariant.md) - M, open (#14)

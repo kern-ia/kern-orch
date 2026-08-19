@@ -3,13 +3,14 @@ type: Issue
 title: "Write the journal and the projection cache in one transaction"
 description: "checkpointHook becomes an atomic journal append plus projection upsert, so the snapshot can never be written independently."
 tags: [epic-1]
-timestamp: 2026-08-19T16:05:00Z
+timestamp: 2026-08-19T17:05:00Z
 epic: 1
 issue: 07
 slug: atomic-journal-and-projection
 size: M
-status: in-progress
+status: pr-open
 gh_issue: 11
+gh_pr: 22
 resource: https://github.com/kern-ia/kern-orch/issues/11
 depends_on: [3, 4, 5]
 ---
