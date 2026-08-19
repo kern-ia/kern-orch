@@ -8,7 +8,7 @@ epic: 1
 issue: 04
 slug: state-projection-from-events
 size: M
-status: pr-open
+status: done
 gh_issue: 8
 gh_pr: 20
 resource: https://github.com/kern-ia/kern-orch/issues/8

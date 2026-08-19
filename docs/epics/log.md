@@ -13,3 +13,6 @@
 * **Update**: Issue 03 (#7, journal store append/read) implemented on `feature/journal-store`; PR #19 open against `dev`.
 * **Update**: Issue 03 (#7, PR #19) merged into `dev`; issue closed.
 * **Update**: Issue 04 (#8, state projection from events) implemented on `feature/state-projection`; PR #20 open against `dev`.
+* **Update**: Issue 04 (#8, PR #20) merged into `dev`; issue closed.
+* **Update**: Issue 05 (#9, engine event emission) started on `feature/engine-event-emission`.
+* **Update**: Issue 05 (#9, engine event emission) implemented on `feature/engine-event-emission`; PR #21 open against `dev`.
