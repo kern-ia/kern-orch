@@ -16,3 +16,5 @@
 * **Update**: Issue 04 (#8, PR #20) merged into `dev`; issue closed.
 * **Update**: Issue 05 (#9, engine event emission) started on `feature/engine-event-emission`.
 * **Update**: Issue 05 (#9, engine event emission) implemented on `feature/engine-event-emission`; PR #21 open against `dev`.
+* **Update**: Issue 05 (#9, PR #21) merged into `dev`; issue closed.
+* **Update**: Issue 07 (#11, atomic journal and projection) started on `feature/atomic-journal-projection`.
