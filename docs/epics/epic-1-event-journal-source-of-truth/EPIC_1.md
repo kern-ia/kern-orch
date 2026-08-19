@@ -8,7 +8,7 @@ epic: 1
 slug: event-journal-source-of-truth
 status: draft
 gh_issue: null
-milestone: null
+milestone: 1
 source: ../../planning/changes/change-1-event-journal-source-of-truth/index.md
 ---
 
