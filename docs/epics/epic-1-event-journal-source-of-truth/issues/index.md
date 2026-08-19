@@ -1,6 +1,6 @@
 # Issues — Epic 1: Event journal as the source of truth
 
-* [Add a monotonic SQLite schema version and refuse unknown versions](./01-sqlite-schema-versioning.md) - S, open (#5)
+* [Add a monotonic SQLite schema version and refuse unknown versions](./01-sqlite-schema-versioning.md) - S, in-progress (#5)
 * [Define the internal journal event vocabulary](./02-journal-event-vocabulary.md) - S, open (#6)
 * [Persist and read the journal in SQLite](./03-journal-store-append-read.md) - M, open (#7)
 * [Project a run state by replaying its journal](./04-state-projection-from-events.md) - M, open (#8)
