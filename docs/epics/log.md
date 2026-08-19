@@ -8,3 +8,5 @@
 * **Update**: Issue 01 (#5, SQLite schema versioning) implemented on `feature/sqlite-schema-versioning`; PR #17 open against `dev`.
 * **Update**: Issue 01 (#5, PR #17) merged into `dev`; issue closed.
 * **Update**: Issue 02 (#6, journal event vocabulary) implemented on `feature/journal-event-vocabulary`; PR #18 open against `dev`.
+* **Update**: Issue 02 (#6, PR #18) merged into `dev`; issue closed.
+* **Update**: Issue 03 (#7, journal store append/read) started on `feature/journal-store`.
