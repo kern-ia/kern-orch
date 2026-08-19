@@ -18,7 +18,8 @@ import (
 // reinterpreted. Nothing migrates a database from one version to another — a mismatch is a
 // dead end on purpose, because guessing at the difference is how a run silently reads rows
 // written under rules that no longer hold.
-const SchemaVersion = 1
+// Version 2 added the events table (the run journal, issue 03 of the event-journal epic).
+const SchemaVersion = 2
 
 // unversionedSchema is what a database created before this mechanism reports. It is a real
 // version, not a missing one: those files exist, they were written under different rules,
@@ -30,6 +31,14 @@ const unversionedSchema = 0
 // message naming the file, so the operator knows which database to move aside.
 var ErrSchemaVersion = errors.New("checkpoint: unsupported schema version")
 
+// schema is every table this build understands, created as one unit under SchemaVersion.
+//
+// events holds one row per journal entry. The whole journal.Event travels in a single JSON
+// column rather than a column per field, so internal/journal stays the only owner of the
+// encoding: a payload type added there needs no migration here, and there is no second
+// decoder that could drift from the first. run_id, seq and at are lifted out because they
+// are what queries and human inspection actually filter and order on; nothing reads them
+// back into an Event, so the duplication cannot go stale in a way that changes a read.
 const schema = `
 CREATE TABLE IF NOT EXISTS schema_meta (
 	id      INTEGER PRIMARY KEY CHECK (id = 1),
@@ -47,6 +56,14 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 	requester  TEXT    NOT NULL DEFAULT '',
 	dossier    TEXT    NOT NULL DEFAULT '',
 	PRIMARY KEY (run_id, step)
+);
+
+CREATE TABLE IF NOT EXISTS events (
+	run_id TEXT    NOT NULL,
+	seq    INTEGER NOT NULL,
+	at     TEXT    NOT NULL,
+	event  TEXT    NOT NULL,
+	PRIMARY KEY (run_id, seq)
 );`
 
 // SQLiteStore is a Store backed by modernc.org/sqlite (pure Go, no cgo).

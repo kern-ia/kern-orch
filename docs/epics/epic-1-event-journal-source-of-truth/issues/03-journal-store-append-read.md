@@ -3,13 +3,14 @@ type: Issue
 title: "Persist and read the journal in SQLite"
 description: "An append-only events table with ordered reads per run, written under the schema version from issue 01."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T11:45:00Z
 epic: 1
 issue: 03
 slug: journal-store-append-read
 size: M
-status: open
+status: pr-open
 gh_issue: 7
+gh_pr: 19
 resource: https://github.com/kern-ia/kern-orch/issues/7
 depends_on: [1, 2]
 ---
