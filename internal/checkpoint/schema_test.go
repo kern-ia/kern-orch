@@ -102,6 +102,59 @@ func TestADatabaseStampedWithAnUnknownVersionIsRefusedByFilePath(t *testing.T) {
 	}
 }
 
+func TestADatabaseStampedWithAnOlderVersionIsRefusedRatherThanMigrated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "from-the-past.db")
+	stampWith(t, path, SchemaVersion-1)
+
+	// Older is refused on exactly the same footing as newer: nothing here migrates, so a
+	// database written before the events table would otherwise be read by statements that
+	// expect that table to exist.
+	st, err := OpenSQLite(path)
+	if err == nil {
+		st.Close()
+		t.Fatalf("OpenSQLite on version %d = nil error; want refusal", SchemaVersion-1)
+	}
+	if !errors.Is(err, ErrSchemaVersion) {
+		t.Fatalf("error = %v; want one matching ErrSchemaVersion", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Fatalf("error message = %q; want it to name the database file %q", err.Error(), path)
+	}
+}
+
+func TestTheSchemaVersionIsAtLeastTwoNowThatTheJournalTableExists(t *testing.T) {
+	// The version is what refuses a pre-journal database; leaving it at 1 while adding a
+	// table is exactly the silent reinterpretation issue 01 exists to prevent.
+	if SchemaVersion < 2 {
+		t.Fatalf("SchemaVersion = %d; want at least 2 now that the events table is part of the schema", SchemaVersion)
+	}
+}
+
+func TestAFreshDatabaseCarriesTheEventsTable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tables.db")
+	st, err := OpenSQLite(path)
+	if err != nil {
+		t.Fatalf("OpenSQLite: %v", err)
+	}
+	defer st.Close()
+
+	// The journal table is created by the same stamped transaction as the rest, not lazily
+	// on first append: a table that appears later would make one stamp describe two
+	// different databases depending on whether a run had ever written an event.
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer db.Close()
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'events'`).Scan(&n); err != nil {
+		t.Fatalf("inspect sqlite_master: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("events tables in a fresh database = %d; want 1", n)
+	}
+}
+
 func TestADatabaseWrittenBeforeTheStampExistedIsRefusedRatherThanAdopted(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	// Exactly what a pre-versioning build left behind: the checkpoints table as it was
