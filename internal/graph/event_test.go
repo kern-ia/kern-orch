@@ -429,6 +429,68 @@ func TestEveryNodeOfAWideFanOutIsReportedWhenEmittingFromItsOwnGoroutine(t *test
 	}
 }
 
+// A node that calls State.Freeze on a single-node frontier reports a freeze_applied event
+// instead of node_produced: the branch's Frozen counter moved, so what it wrote is a
+// wholesale replacement (CarriedOver), not the diff node_produced would otherwise carry.
+func TestASingleNodeFreezeEmitsFreezeAppliedInsteadOfNodeProduced(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(NewToolNode("freeze", func(_ context.Context, s *State) error {
+		s.Freeze(nil) // default carry-over: keeps persistent, drops ephemeral
+		return nil
+	}))
+	g.SetEntry("freeze")
+	rec := &eventRecorder{}
+	s := NewState()
+	s.Set("goal", "ship")                       // persistent, survives
+	s.SetZoned(ZoneEphemeral, "scratch", "tmp") // ephemeral, dropped
+	if err := NewEngine(g).OnEvent(rec.hook).Run(context.Background(), s); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, ok := rec.node(EventNodeProduced, "freeze"); ok {
+		t.Fatalf("a node that froze must not also report node_produced; kinds = %v", rec.kinds())
+	}
+	frozen, ok := rec.node(EventFreezeApplied, "freeze")
+	if !ok {
+		t.Fatalf("want exactly one freeze_applied for freeze; kinds = %v", rec.kinds())
+	}
+	if frozen.CarriedOver["goal"] != "ship" {
+		t.Fatalf("CarriedOver = %v; want goal=ship", frozen.CarriedOver)
+	}
+	if _, kept := frozen.CarriedOver["scratch"]; kept {
+		t.Fatalf("CarriedOver keeps ephemeral key scratch: %v", frozen.CarriedOver)
+	}
+	if len(frozen.Dropped) != 1 || frozen.Dropped[0] != "scratch" {
+		t.Fatalf("Dropped = %v; want [scratch]", frozen.Dropped)
+	}
+}
+
+// A freeze inside a fan-out has no single branch to attribute it to (runLevel.Merge does
+// not fold Frozen or dropped keys), and projection.Project already refuses to replay one.
+// The engine must refuse it live, at the same node, rather than accept a run that produces a
+// journal replay cannot reconstruct.
+func TestAFreezeInsideAFanOutFailsTheLevel(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(appendNode("root"))
+	g.AddNode(NewToolNode("freezer", func(_ context.Context, s *State) error {
+		s.Freeze(nil)
+		return nil
+	}))
+	g.AddNode(appendNode("plain"))
+	g.SetEntry("root")
+	g.AddEdge("root", Static("freezer", "plain"))
+	rec := &eventRecorder{}
+	err := NewEngine(g).OnEvent(rec.hook).Run(context.Background(), NewState())
+	if err == nil {
+		t.Fatalf("Run: want an error for a freeze inside a fan-out, got nil")
+	}
+	if _, ok := rec.node(EventFreezeApplied, "freezer"); ok {
+		t.Fatalf("a rejected freeze must not still be reported as applied; kinds = %v", rec.kinds())
+	}
+	if _, ok := rec.node(EventNodeFailed, "freezer"); !ok {
+		t.Fatalf("want node_failed for freezer; kinds = %v", rec.kinds())
+	}
+}
+
 func TestNodeStartedPrecedesTheNodesOwnOutcome(t *testing.T) {
 	g := NewGraph()
 	g.AddNode(appendNode("root")).AddNode(appendNode("x")).AddNode(appendNode("y"))

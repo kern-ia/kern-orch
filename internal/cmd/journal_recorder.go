@@ -196,6 +196,12 @@ func journalPayload(ev graph.Event, graphName string) (journal.Payload, error) {
 		}, nil
 	case graph.EventNodeFailed:
 		return journal.NodeFailed{NodeID: ev.NodeID, Message: errorText(ev.Err)}, nil
+	case graph.EventFreezeApplied:
+		// journal.FreezeApplied carries no node id, mirroring graph.Event's own doc on the
+		// kind: the engine only refuses a freeze it cannot attribute to a single node, it
+		// does not record which one, and replay does not need to — CarriedOver alone
+		// determines the reconstructed state.
+		return journal.FreezeApplied{CarriedOver: copyData(ev.CarriedOver), Dropped: copyStrings(ev.Dropped)}, nil
 	default:
 		return nil, fmt.Errorf("cmd: record run event: unknown event kind %q", string(ev.Kind))
 	}

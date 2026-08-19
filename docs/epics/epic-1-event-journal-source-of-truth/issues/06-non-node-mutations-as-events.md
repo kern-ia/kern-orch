@@ -3,12 +3,13 @@ type: Issue
 title: "Record nudge, freeze and the combination rule as events"
 description: "The three state mutations that no node performs become first-class events, which is what gives the invariant meaning."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T17:20:00Z
 epic: 1
 issue: 06
 slug: non-node-mutations-as-events
 size: M
-status: open
+status: pr-open
+gh_pr: 26
 gh_issue: 10
 resource: https://github.com/kern-ia/kern-orch/issues/10
 depends_on: [5]

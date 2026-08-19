@@ -445,6 +445,29 @@ func TestTheAdapterCarriesANodesZoneLabels(t *testing.T) {
 	}
 }
 
+// A freeze the engine attributes to a node carries no node id across into the journal: the
+// engine only ever emits freeze_applied for a single-node frontier (runLevel refuses any
+// other case), and journal.FreezeApplied itself has no node field to put one in.
+func TestTheAdapterCarriesFreezeApplied(t *testing.T) {
+	payload, err := journalPayload(graph.Event{
+		Kind: graph.EventFreezeApplied, NodeID: "freeze",
+		CarriedOver: map[string]any{"goal": "ship"}, Dropped: []string{"scratch"},
+	}, "demo")
+	if err != nil {
+		t.Fatalf("journalPayload: %v", err)
+	}
+	frozen, ok := payload.(journal.FreezeApplied)
+	if !ok {
+		t.Fatalf("payload is %T, want journal.FreezeApplied", payload)
+	}
+	if frozen.CarriedOver["goal"] != "ship" {
+		t.Fatalf("CarriedOver = %v, want goal=ship", frozen.CarriedOver)
+	}
+	if len(frozen.Dropped) != 1 || frozen.Dropped[0] != "scratch" {
+		t.Fatalf("Dropped = %v, want [scratch]", frozen.Dropped)
+	}
+}
+
 func recorderStateJSON(t *testing.T, s *graph.State) string {
 	t.Helper()
 	b, err := json.Marshal(s)

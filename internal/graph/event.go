@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"reflect"
+	"sort"
 )
 
 // EventKind names one fact the engine reports as it executes. The set is closed and
@@ -34,6 +35,10 @@ const (
 	EventNodeProduced EventKind = "node_produced"
 	// EventNodeFailed reports a node whose Execute returned an error.
 	EventNodeFailed EventKind = "node_failed"
+	// EventFreezeApplied reports a node whose Execute called State.Freeze: the branch's
+	// Frozen counter moved, so what it wrote is a wholesale replacement, not a diff — see
+	// CarriedOver/Dropped on Event and runLevel's use of freezeDiff.
+	EventFreezeApplied EventKind = "freeze_applied"
 )
 
 // CombinationRule names how a level's branches were folded back into the shared state.
@@ -69,6 +74,10 @@ const (
 //	EventNodeStarted   — NodeID.
 //	EventNodeProduced  — NodeID, Data, Zones.
 //	EventNodeFailed    — NodeID, Err.
+//	EventFreezeApplied — NodeID, CarriedOver, Dropped. NodeID is engine-side attribution
+//	                     only (runLevel refuses a freeze outside a single-node frontier, so
+//	                     it always names that one node); journal.FreezeApplied itself
+//	                     carries no node id, so the adapter drops it on the way across.
 type Event struct {
 	Kind EventKind
 
@@ -90,6 +99,17 @@ type Event struct {
 	Nodes []string
 	// Err is the failure a node or a run reported, wrapped as the engine wraps it.
 	Err error
+	// CarriedOver holds every key/value a Freeze kept — the branch's entire contents after
+	// Execute returned, not a diff against what the level started with. State.Freeze
+	// replaces the branch wholesale, so a diff (like Data above) would silently lose every
+	// key the carry-over dropped; a downstream replay only sees this event, never the
+	// branch it came from.
+	CarriedOver map[string]any
+	// Dropped names the keys the level held before this node ran that are absent from
+	// CarriedOver — audit information only. Replay does not need it to reconstruct the
+	// state (CarriedOver alone determines that); it is what lets a human or a report say
+	// what a Freeze discarded, not just what it kept.
+	Dropped []string
 }
 
 // EventFunc is the port through which the engine reports what a run did. It follows the
@@ -159,4 +179,29 @@ func producedKeys(before, after *State) (map[string]any, map[string]string) {
 		}
 	}
 	return data, zones
+}
+
+// freezeDiff reports what a Freeze inside a node's Execute did: the branch's entire
+// contents afterwards (CarriedOver — everything the freeze kept, plus anything the node
+// wrote after freezing, since both end up indistinguishable in the branch and both must
+// survive replay), and the keys the level held before this node ran that are gone from it
+// now (Dropped).
+//
+// Unlike producedKeys this is not a diff of changed keys: State.Freeze discards the
+// branch's contents wholesale, so "only what changed" would silently drop every carried-over
+// key whose value happened to survive unchanged, and a replay that only sees this event
+// would rebuild a state missing them.
+func freezeDiff(before, after *State) (map[string]any, []string) {
+	carried := make(map[string]any, len(after.data))
+	for k, v := range after.data {
+		carried[k] = v
+	}
+	var dropped []string
+	for k := range before.data {
+		if _, ok := after.data[k]; !ok {
+			dropped = append(dropped, k)
+		}
+	}
+	sort.Strings(dropped)
+	return carried, dropped
 }
