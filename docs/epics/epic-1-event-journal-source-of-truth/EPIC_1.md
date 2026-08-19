@@ -3,12 +3,13 @@ type: Epic
 title: "Event journal as the source of truth"
 description: "Replace the per-level state snapshot with an append-only event journal from which the run state is projected, and enforce that anything a node can read is reconstructable from it."
 tags: [epic, change]
-timestamp: 2026-08-19T09:16:15Z
+timestamp: 2026-08-19T10:02:00Z
 epic: 1
 slug: event-journal-source-of-truth
-status: draft
-gh_issue: null
+status: open
+gh_issue: 4
 milestone: 1
+resource: https://github.com/kern-ia/kern-orch/issues/4
 source: ../../planning/changes/change-1-event-journal-source-of-truth/index.md
 ---
 
