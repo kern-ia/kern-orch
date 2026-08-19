@@ -4,14 +4,38 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/yoann/kern-orch/internal/graph"
 	_ "modernc.org/sqlite"
 )
 
+// SchemaVersion is the schema this build understands. It only ever grows: every change to
+// the tables below bumps it, and a database carrying any other value is refused rather than
+// reinterpreted. Nothing migrates a database from one version to another — a mismatch is a
+// dead end on purpose, because guessing at the difference is how a run silently reads rows
+// written under rules that no longer hold.
+const SchemaVersion = 1
+
+// unversionedSchema is what a database created before this mechanism reports. It is a real
+// version, not a missing one: those files exist, they were written under different rules,
+// and 0 makes them fall through the same refusal as any other mismatch instead of needing a
+// special case that would inevitably end in adopting them.
+const unversionedSchema = 0
+
+// ErrSchemaVersion reports a database this build must not touch. Callers get it wrapped in a
+// message naming the file, so the operator knows which database to move aside.
+var ErrSchemaVersion = errors.New("checkpoint: unsupported schema version")
+
 const schema = `
+CREATE TABLE IF NOT EXISTS schema_meta (
+	id      INTEGER PRIMARY KEY CHECK (id = 1),
+	version INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS checkpoints (
 	run_id     TEXT    NOT NULL,
 	step       INTEGER NOT NULL,
@@ -36,8 +60,8 @@ type SQLiteStore struct {
 // goroutine may be writing one — a real concurrent access this store never had before.
 const busyTimeoutMS = 5000
 
-// OpenSQLite opens (creating if needed) the checkpoint database at path and ensures
-// the schema exists.
+// OpenSQLite opens the checkpoint database at path, creating and stamping it when the file
+// holds nothing yet, and refuses any existing database whose stamp is not SchemaVersion.
 func OpenSQLite(path string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -51,17 +75,88 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, fmt.Errorf("checkpoint: set busy_timeout: %w", err)
 	}
-	if _, err := db.Exec(schema); err != nil {
+	if err := ensureSchema(db, path); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("checkpoint: schema: %w", err)
+		return nil, err
 	}
-	// CREATE TABLE IF NOT EXISTS does nothing for a database that already existed before
-	// this column was added — no migration mechanism exists yet in this project's dev
-	// stage, so this one ALTER TABLE covers the gap. Errors are ignored: the only failure
-	// mode against this fixed schema is "column already exists" on every run after the
-	// first, which is not a fault.
-	_, _ = db.Exec(`ALTER TABLE checkpoints ADD COLUMN dossier TEXT NOT NULL DEFAULT ''`)
 	return &SQLiteStore{db: db}, nil
+}
+
+// ensureSchema creates and stamps an empty database, and otherwise only checks the stamp.
+// The check comes before any statement that could write, so a database this build does not
+// understand is left exactly as its own build left it.
+func ensureSchema(db *sql.DB, path string) error {
+	empty, err := isEmpty(db)
+	if err != nil {
+		return err
+	}
+	if !empty {
+		version, err := storedSchemaVersion(db)
+		if err != nil {
+			return err
+		}
+		if version != SchemaVersion {
+			return fmt.Errorf("checkpoint: open %q: database at schema version %d, this build understands %d: %w",
+				path, version, SchemaVersion, ErrSchemaVersion)
+		}
+		// The stamp already says what this build would write, so nothing is written: an
+		// unchanged file is what lets an operator (or a reader-only process) open the
+		// database without touching its mtime or taking a write lock.
+		return nil
+	}
+	// Tables and stamp go in one transaction. Split apart, a crash between them would leave
+	// a database with tables and no stamp — indistinguishable from a pre-versioning file,
+	// and therefore refused forever.
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("checkpoint: begin schema creation: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(schema); err != nil {
+		return fmt.Errorf("checkpoint: schema: %w", err)
+	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO schema_meta (id, version) VALUES (1, ?)`, SchemaVersion); err != nil {
+		return fmt.Errorf("checkpoint: stamp schema version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("checkpoint: commit schema creation: %w", err)
+	}
+	return nil
+}
+
+// isEmpty reports whether the file holds no user table yet, which is the one case where this
+// build may create a schema. Any other content — an older checkpoint database, or some other
+// application's file pointed at by a mistyped path — belongs to the version check.
+func isEmpty(db *sql.DB) (bool, error) {
+	var n int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`).Scan(&n); err != nil {
+		return false, fmt.Errorf("checkpoint: inspect schema: %w", err)
+	}
+	return n == 0, nil
+}
+
+// storedSchemaVersion reads the stamp of a non-empty database. A missing schema_meta table is
+// not an error to report upwards but the answer itself: such a database predates the stamp.
+func storedSchemaVersion(db *sql.DB) (int, error) {
+	var version int
+	err := db.QueryRow(`SELECT version FROM schema_meta WHERE id = 1`).Scan(&version)
+	switch {
+	case err == nil:
+		return version, nil
+	case errors.Is(err, sql.ErrNoRows):
+		return unversionedSchema, nil
+	case isMissingSchemaMeta(err):
+		return unversionedSchema, nil
+	default:
+		return 0, fmt.Errorf("checkpoint: read schema version: %w", err)
+	}
+}
+
+// isMissingSchemaMeta recognises the driver's "no such table" failure. The driver exposes no
+// typed error for it, so the message is all there is to match on; the query is fixed and
+// literal, so it can only ever be this one table that is missing.
+func isMissingSchemaMeta(err error) bool {
+	return strings.Contains(err.Error(), "no such table: schema_meta")
 }
 
 // Save upserts the checkpoint for (RunID, Step).

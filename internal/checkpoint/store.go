@@ -1,6 +1,14 @@
 // Package checkpoint persists run state per step to SQLite so a run can be resumed
 // after failure and inspected. It depends on graph only for the State type; the graph
 // engine reaches this package through its StepFunc hook, not the other way around.
+//
+// The SQLite schema carries a version, held in a one-row schema_meta table rather than in
+// PRAGMA user_version. The pragma is cheaper but invisible: it does not survive `.dump` and
+// restore, and an operator inspecting a database with a plain SELECT would never see it — so
+// a restored file would claim to be unversioned and be refused for a reason nothing on disk
+// explains. A row is readable by the same means as everything else here, which matters
+// because the only thing this mechanism ever does about a mismatch is refuse and expect a
+// human to look.
 package checkpoint
 
 import (
