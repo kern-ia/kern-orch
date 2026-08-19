@@ -8,7 +8,7 @@ epic: 1
 issue: 03
 slug: journal-store-append-read
 size: M
-status: pr-open
+status: done
 gh_issue: 7
 gh_pr: 19
 resource: https://github.com/kern-ia/kern-orch/issues/7

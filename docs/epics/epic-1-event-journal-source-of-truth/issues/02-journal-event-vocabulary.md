@@ -3,7 +3,7 @@ type: Issue
 title: "Define the internal journal event vocabulary"
 description: "A new internal event type set, distinct from the kern.step-event wire contract, rich enough for exact replay."
 tags: [epic-1]
-timestamp: 2026-08-19T11:00:00Z
+timestamp: 2026-08-19T14:10:00Z
 epic: 1
 issue: 02
 slug: journal-event-vocabulary
