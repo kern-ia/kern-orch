@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -71,6 +72,7 @@ type Engine struct {
 	maxSteps    int
 	onStep      StepFunc
 	beforeLevel NudgeFunc
+	onEvent     EventFunc
 }
 
 // NudgeFunc is called before each level starts, with the chance to mutate the shared
@@ -115,6 +117,12 @@ func (e *Engine) OnBeforeLevel(f NudgeFunc) *Engine {
 	return e
 }
 
+// OnEvent registers the hook the engine reports run facts through (see EventFunc).
+func (e *Engine) OnEvent(f EventFunc) *Engine {
+	e.onEvent = f
+	return e
+}
+
 // Run executes the graph from its entry node, mutating s in place.
 func (e *Engine) Run(ctx context.Context, s *State) error {
 	return e.RunFrom(ctx, s, []string{e.g.entry})
@@ -123,10 +131,38 @@ func (e *Engine) Run(ctx context.Context, s *State) error {
 // RunFrom executes the graph starting from an arbitrary frontier — used by resume to
 // continue from a checkpoint. It stops when the frontier empties or ctx is cancelled,
 // and errors if the step budget is exhausted (cycle guard).
+// It also opens and closes the run's record: a run that reached Validate is a run that
+// happened, so every exit from here carries a terminal event — finished or failed, never
+// silence. A graph that fails Validate never started, and emits nothing at all.
 func (e *Engine) RunFrom(ctx context.Context, s *State, frontier []string) error {
 	if err := e.g.Validate(); err != nil {
 		return err
 	}
+	if err := e.emit(ctx, Event{Kind: EventRunStarted}); err != nil {
+		return err
+	}
+	err := e.runLevels(ctx, s, frontier)
+	if err == nil {
+		return e.emit(ctx, Event{Kind: EventRunFinished})
+	}
+	var lvl *LevelError
+	var nodes []string
+	if errors.As(err, &lvl) {
+		nodes = lvl.Nodes
+	}
+	// The run's own error wins: it is what the caller acts on. An emitter that also refused
+	// the closing event is joined rather than dropped — a record that could not be closed is
+	// a fact about the record, and swallowing it here is exactly how a truncated journal
+	// would look identical to a clean failure.
+	if emitErr := e.emit(ctx, Event{Kind: EventRunFailed, Nodes: nodes, Err: err}); emitErr != nil {
+		return errors.Join(err, emitErr)
+	}
+	return err
+}
+
+// runLevels is RunFrom's loop, split out so RunFrom has a single place to emit the run's
+// terminal event from — every abort below is a plain return.
+func (e *Engine) runLevels(ctx context.Context, s *State, frontier []string) error {
 	for level := 0; len(frontier) > 0; level++ {
 		if level >= e.maxSteps {
 			return fmt.Errorf("graph: step budget %d exhausted (cycle?)", e.maxSteps)
@@ -175,11 +211,18 @@ func (e *LevelError) Unwrap() error { return e.Err }
 
 // runLevel executes every node in the frontier in parallel and merges results.
 func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]string, error) {
+	// Each goroutine writes only its own slot, including its emitErr, so the emission path
+	// needs no lock of its own — the hook is the one thing shared across them, which is why
+	// EventFunc requires an implementation safe for concurrent use.
 	type outcome struct {
-		id     string
-		branch *State
-		route  []string
-		err    error
+		id      string
+		branch  *State
+		route   []string
+		err     error
+		emitErr error
+	}
+	if err := e.emit(ctx, Event{Kind: EventLevelOpened, Frontier: frontier}); err != nil {
+		return nil, err
 	}
 	results := make([]outcome, len(frontier))
 	var wg sync.WaitGroup
@@ -191,9 +234,15 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 		wg.Add(1)
 		go func(i int, id string, node Node) {
 			defer wg.Done()
+			if err := e.emit(ctx, Event{Kind: EventNodeStarted, NodeID: id}); err != nil {
+				results[i] = outcome{id: id, emitErr: err}
+				return
+			}
 			branch := s.Clone()
 			if err := node.Execute(ctx, branch); err != nil {
-				results[i] = outcome{id: id, err: fmt.Errorf("node %q: %w", id, err)}
+				wrapped := fmt.Errorf("node %q: %w", id, err)
+				results[i] = outcome{id: id, err: wrapped}
+				results[i].emitErr = e.emit(ctx, Event{Kind: EventNodeFailed, NodeID: id, Err: wrapped})
 				return
 			}
 			var route []string
@@ -201,9 +250,25 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 				route = r(branch)
 			}
 			results[i] = outcome{id: id, branch: branch, route: route}
+			// Reading s while the level runs is safe: the shared state is only written after
+			// wg.Wait, so every branch diffs against the same frozen starting point.
+			if e.onEvent != nil {
+				data, zones := producedKeys(s, branch)
+				results[i].emitErr = e.emit(ctx, Event{
+					Kind: EventNodeProduced, NodeID: id, Data: data, Zones: zones,
+				})
+			}
 		}(i, id, node)
 	}
 	wg.Wait()
+
+	// An emitter that refused stops the run before any branch is combined: the record must
+	// not gain a level whose nodes it never recorded.
+	for _, o := range results {
+		if o.emitErr != nil {
+			return nil, o.emitErr
+		}
+	}
 
 	// Combine branches deterministically (frontier order) and collect the next frontier.
 	// A single-node frontier REPLACES the state with its branch, so context-replacing
@@ -228,6 +293,10 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 	}
 
 	single := len(results) == 1
+	rule := CombinationMerge
+	if single {
+		rule = CombinationReplace
+	}
 	seen := make(map[string]bool)
 	var next []string
 	for _, o := range results {
@@ -245,5 +314,11 @@ func (e *Engine) runLevel(ctx context.Context, s *State, frontier []string) ([]s
 		}
 	}
 	sort.Strings(next)
+	// Closed only now, with the rule that was actually applied. A level that failed above
+	// returned without this event on purpose: it combined nothing, so naming a rule it never
+	// used would put a fact in the record that never happened.
+	if err := e.emit(ctx, Event{Kind: EventLevelClosed, Frontier: frontier, Rule: rule}); err != nil {
+		return nil, err
+	}
 	return next, nil
 }
