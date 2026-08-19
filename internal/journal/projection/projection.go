@@ -10,7 +10,7 @@
 // import graph back).
 //
 // Project is pure: it takes an ordered slice and returns a state. Reading events out of
-// SQLite is the caller's job (issue 07) and closing an interrupted tail is issue 08's; a
+// SQLite is the caller's job (issue 07) and closing an interrupted tail is issue 12's; a
 // projection that also did I/O could not be exhaustively tested before either exists.
 //
 // # What replay cannot re-derive, and therefore reads off the events
@@ -39,13 +39,11 @@ import (
 // projection that quietly skipped an event it did not understand would produce a state no
 // run ever had, and nothing downstream could tell.
 func Project(events []journal.Event) (*graph.State, error) {
-	p := &projector{shared: graph.NewState()}
-	for i, ev := range events {
-		if err := p.apply(i, ev); err != nil {
-			return nil, err
-		}
+	replayed, err := Replay(events)
+	if err != nil {
+		return nil, err
 	}
-	return p.shared, nil
+	return replayed.State, nil
 }
 
 // projector holds the replay's running position: the shared state so far, and the level
@@ -58,7 +56,7 @@ type projector struct {
 	runID    string
 	lastSeq  int64
 	seenAny  bool
-	closedBy string
+	closedBy journal.Kind
 }
 
 type openLevel struct {
@@ -93,13 +91,13 @@ func (p *projector) apply(index int, ev journal.Event) error {
 		// accepted rather than rejected as unknown, so a full journal replays as-is.
 		return nil
 	case journal.RunFinished:
-		p.closedBy = string(journal.KindRunFinished)
+		p.closedBy = journal.KindRunFinished
 		return nil
 	case journal.RunFailed:
-		p.closedBy = string(journal.KindRunFailed)
+		p.closedBy = journal.KindRunFailed
 		return nil
 	case journal.RunInterrupted:
-		p.closedBy = string(journal.KindRunInterrupted)
+		p.closedBy = journal.KindRunInterrupted
 		return nil
 	case journal.LevelOpened:
 		return p.openLevel(index, payload)

@@ -82,10 +82,15 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 }
 
 // run executes a prepared graph to completion — fresh if resume is nil, continued from a
-// checkpoint otherwise — and reports a failure if there is one. It is the single
+// replayed resume point otherwise — and reports a failure if there is one. It is the single
 // implementation `run`, `resume` and the daemon all call: none of the three may drift from
 // how a report is flushed or a failure is announced.
-func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, runID string, resume *checkpoint.Record) error {
+//
+// It takes a checkpoint.ResumePoint rather than a checkpoint.Record so that the state it
+// continues from is the one replayed from the journal. A Record also carries the cached
+// row's state, and this is the path where continuing from a state the run never had is
+// unrecoverable — so the type that reaches here has no such field to reach for.
+func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, runID string, resume *checkpoint.ResumePoint) error {
 	defer p.reporter.Flush()
 	defer p.activityReporter.Flush()
 
@@ -215,27 +220,32 @@ func (d *daemonRunner) StartRun(ctx context.Context, graphPath, requester string
 	return runID, nil
 }
 
-// ResumeRun continues a run in the background. A run with an empty frontier is already
-// complete — a no-op, not an error, matching what `kern-orch resume` tells a human.
+// ResumeRun continues a run in the background, from the state its journal replays to. A run
+// with an empty frontier is already complete — a no-op, not an error, matching what
+// `kern-orch resume` tells a human.
+//
+// It goes through the same checkpoint.ResumePoint as the CLI's `resume`, which is what makes
+// POST /api/v1/runs/{id}/resume and the command line one operation rather than two
+// implementations that agree until one of them is changed.
 func (d *daemonRunner) ResumeRun(ctx context.Context, runID string) error {
-	rec, ok, err := d.store.Latest(ctx, runID)
+	resume, ok, err := d.store.ResumePoint(ctx, runID)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return daemon.ErrUnknownRun
 	}
-	if len(rec.Frontier) == 0 {
+	if len(resume.Frontier) == 0 {
 		return nil
 	}
-	if rec.GraphPath == "" {
+	if resume.GraphPath == "" {
 		return fmt.Errorf("run %q has no recorded graph path", runID)
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	mailbox := d.registerMailbox(runID, cancel)
 
-	prepared, err := prepareRun(d.cfg, runID, rec.GraphPath, rec.Requester, rec.Dossier, mailbox)
+	prepared, err := prepareRun(d.cfg, runID, resume.GraphPath, resume.Requester, resume.Dossier, mailbox)
 	if err != nil {
 		cancel()
 		d.unregisterMailbox(runID)
@@ -244,7 +254,7 @@ func (d *daemonRunner) ResumeRun(ctx context.Context, runID string) error {
 
 	go func() {
 		defer d.unregisterMailbox(runID)
-		if err := prepared.run(runCtx, d.store, runID, &rec); err != nil {
+		if err := prepared.run(runCtx, d.store, runID, &resume); err != nil {
 			slog.Error("kern-orch: resumed run failed", "run_id", runID, "error", err)
 			return
 		}

@@ -71,19 +71,23 @@ func newResumeCmd() *cobra.Command {
 			}
 			defer store.Close()
 
-			rec, ok, err := store.Latest(cmd.Context(), runID)
+			// The state comes from replaying the run's journal, never from the checkpoint
+			// row: that row is a cache of the projection, and a cache is allowed to be
+			// stale. Resuming from a stale one continues a run from a state it never had,
+			// and nothing downstream could tell. See checkpoint.ResumePoint.
+			resume, ok, err := store.ResumePoint(cmd.Context(), runID)
 			if err != nil {
 				return err
 			}
 			if !ok {
 				return fmt.Errorf("no checkpoint for run %q", runID)
 			}
-			if len(rec.Frontier) == 0 {
+			if len(resume.Frontier) == 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "run %s already complete\n", runID)
 				return nil
 			}
 			// Graph path: explicit arg overrides, else the one recorded at run time.
-			graphPath := rec.GraphPath
+			graphPath := resume.GraphPath
 			if len(args) == 2 {
 				graphPath = args[1]
 			}
@@ -94,12 +98,12 @@ func newResumeCmd() *cobra.Command {
 			// Requester and dossier carry over from the original run: resuming is not a
 			// new request, and the same actor who could steer it before still can, still
 			// under the same case if it had one.
-			prepared, err := prepareRun(cfg, runID, graphPath, rec.Requester, rec.Dossier, nil)
+			prepared, err := prepareRun(cfg, runID, graphPath, resume.Requester, resume.Dossier, nil)
 			if err != nil {
 				return err
 			}
 
-			if err := prepared.run(cmd.Context(), store, runID, &rec); err != nil {
+			if err := prepared.run(cmd.Context(), store, runID, &resume); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "run %s resumed and completed\n", runID)
