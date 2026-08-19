@@ -23,3 +23,4 @@
 * **Update**: Issues 08 and 10 narrowed and split — issue 12 (#23, interrupted-tail closing) and issue 13 (#24, opt-in runtime equivalence check) created. Six of six issues so far overshot their size band because the no-table-driven-tests convention makes tests two to three times the implementation; the remaining work is cut finer to compensate.
 
 * **Update**: Issue 08 (#12, replay-based resume) implemented on `feature/replay-based-resume`; PR #27 open against `dev`.
+* **Update**: Issue 09 (#13, nested subgraph journals) started on `feature/nested-subgraph-journals`.
