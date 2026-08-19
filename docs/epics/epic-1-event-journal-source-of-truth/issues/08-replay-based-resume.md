@@ -3,12 +3,12 @@ type: Issue
 title: "Resume by replaying the journal"
 description: "resume rebuilds state from events rather than trusting the cached projection row."
 tags: [epic-1]
-timestamp: 2026-08-19T16:00:00Z
+timestamp: 2026-08-19T18:00:00Z
 epic: 1
 issue: 08
 slug: replay-based-resume
 size: M
-status: open
+status: in-progress
 gh_issue: 12
 resource: https://github.com/kern-ia/kern-orch/issues/12
 depends_on: [4, 7]
