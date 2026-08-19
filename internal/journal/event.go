@@ -44,21 +44,35 @@ const (
 // monotonic by whoever appends to the journal (internal/checkpoint, issue 03 of this epic);
 // this package only carries the field.
 type Event struct {
-	RunID   string    `json:"run_id"`
-	Seq     int64     `json:"seq"`
-	At      time.Time `json:"at"`
-	Payload Payload   `json:"payload"`
+	RunID string    `json:"run_id"`
+	Seq   int64     `json:"seq"`
+	At    time.Time `json:"at"`
+	// Synthetic marks an event nobody observed: it was reconstructed after the fact, by a
+	// reader closing a record the writer never got to close (internal/checkpoint, issue 12).
+	// It is provenance, not content, which is why it sits on the envelope rather than in a
+	// field of every payload that could be reconstructed — and why it is one flag rather
+	// than a second Kind: a synthetic RunInterrupted says the same thing about the run as a
+	// real one would, only nobody was alive to say it.
+	//
+	// At carries the moment the event was written, not the moment it describes, and for a
+	// synthetic event those are far apart. The marking is what tells a reader so.
+	Synthetic bool    `json:"synthetic,omitempty"`
+	Payload   Payload `json:"payload"`
 }
 
 // eventWire is Event's JSON shape: Kind rides alongside Payload as an explicit discriminator
 // rather than being inferred from Payload's Go type, because the inverse direction —
 // decoding — has no Go type to infer from, only the bytes on the wire.
 type eventWire struct {
-	RunID   string          `json:"run_id"`
-	Seq     int64           `json:"seq"`
-	Kind    Kind            `json:"kind"`
-	At      time.Time       `json:"at"`
-	Payload json.RawMessage `json:"payload"`
+	RunID string    `json:"run_id"`
+	Seq   int64     `json:"seq"`
+	Kind  Kind      `json:"kind"`
+	At    time.Time `json:"at"`
+	// omitempty, so an observed event encodes to exactly the bytes it did before this
+	// field existed. Every journal already stored was written by an observer, and a
+	// reader must be able to compare an untouched run's rows byte for byte.
+	Synthetic bool            `json:"synthetic,omitempty"`
+	Payload   json.RawMessage `json:"payload"`
 }
 
 // MarshalJSON encodes e with its Kind derived from Payload's concrete type via kindOf, so
@@ -74,11 +88,12 @@ func (e Event) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("journal: marshal %s payload: %w", kind, err)
 	}
 	return json.Marshal(eventWire{
-		RunID:   e.RunID,
-		Seq:     e.Seq,
-		Kind:    kind,
-		At:      e.At,
-		Payload: payload,
+		RunID:     e.RunID,
+		Seq:       e.Seq,
+		Kind:      kind,
+		At:        e.At,
+		Synthetic: e.Synthetic,
+		Payload:   payload,
 	})
 }
 
@@ -100,6 +115,7 @@ func (e *Event) UnmarshalJSON(b []byte) error {
 	e.RunID = raw.RunID
 	e.Seq = raw.Seq
 	e.At = raw.At
+	e.Synthetic = raw.Synthetic
 	e.Payload = payload
 	return nil
 }

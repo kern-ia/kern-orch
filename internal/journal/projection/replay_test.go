@@ -60,6 +60,60 @@ func TestReplayNamesNoOpenFrontierWhenEveryLevelClosed(t *testing.T) {
 	}
 }
 
+// A resumed run continues its own journal, so a second RunStarted lands after the terminal
+// event that closed the previous attempt. It reopens the record: the state carries over —
+// that is what resume continues from — and the level the interrupted attempt left open is
+// dropped, because the engine restarts a level as a whole and that one contributed nothing.
+func TestReplayReopensTheRecordOnASecondRunStarted(t *testing.T) {
+	var s seq
+	got, err := Replay([]journal.Event{
+		s.ev(journal.RunStarted{Graph: "demo"}),
+		s.ev(journal.LevelOpened{Frontier: []string{"seed"}}),
+		s.ev(journal.NodeStarted{NodeID: "seed"}),
+		s.ev(journal.NodeProduced{NodeID: "seed", Data: map[string]any{"n": 3}}),
+		s.ev(journal.LevelClosed{Frontier: []string{"seed"}, Rule: journal.CombinationReplace}),
+		s.ev(journal.LevelOpened{Frontier: []string{"confirm"}}),
+		s.ev(journal.NodeStarted{NodeID: "confirm"}),
+		s.ev(journal.RunInterrupted{Reason: "the process stopped before the level closed"}),
+		s.ev(journal.RunStarted{Graph: "demo"}),
+		s.ev(journal.LevelOpened{Frontier: []string{"confirm"}}),
+		s.ev(journal.NodeStarted{NodeID: "confirm"}),
+		s.ev(journal.NodeProduced{NodeID: "confirm", Data: map[string]any{"ok": true}}),
+		s.ev(journal.LevelClosed{Frontier: []string{"confirm"}, Rule: journal.CombinationReplace}),
+		s.ev(journal.RunFinished{}),
+	})
+	if err != nil {
+		t.Fatalf("Replay returned error %v, want nil", err)
+	}
+	if got.ClosedBy != journal.KindRunFinished {
+		t.Fatalf("ClosedBy = %q, want %q — the last attempt decides", got.ClosedBy, journal.KindRunFinished)
+	}
+	if got.OpenFrontier != nil {
+		t.Fatalf("OpenFrontier = %v, want nil", got.OpenFrontier)
+	}
+	if v, _ := got.State.Get("n"); v != 3 {
+		t.Fatalf("replayed state n = %v, want 3 — the first attempt's level closed", v)
+	}
+	if v, _ := got.State.Get("ok"); v != true {
+		t.Fatalf("replayed state ok = %v, want true — the second attempt's level closed", v)
+	}
+}
+
+// Only a new attempt reopens the record. Anything else arriving after a terminal event is a
+// record that contradicts itself, and replay must still refuse it: without that, a lost
+// LevelClosed and a genuinely reopened run would look the same.
+func TestReplayStillRefusesAnEventThatIsNotANewAttemptAfterTheRunClosed(t *testing.T) {
+	var s seq
+	_, err := Replay([]journal.Event{
+		s.ev(journal.RunStarted{Graph: "demo"}),
+		s.ev(journal.RunFinished{}),
+		s.ev(journal.LevelOpened{Frontier: []string{"seed"}}),
+	})
+	if err == nil {
+		t.Fatal("Replay accepted a level opened after the run finished, want an error")
+	}
+}
+
 // The state and the position come out of one traversal, so a caller cannot get a state from
 // one reading of the journal and a frontier from another.
 func TestReplayAndProjectAgreeOnTheState(t *testing.T) {

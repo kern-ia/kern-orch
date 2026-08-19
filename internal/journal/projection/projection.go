@@ -82,7 +82,20 @@ func (p *projector) apply(index int, ev journal.Event) error {
 	p.lastSeq = ev.Seq
 
 	if p.closedBy != "" {
-		return fmt.Errorf("projection: event %d (seq %d) arrives after the run was already closed by %s", index, ev.Seq, p.closedBy)
+		// A resumed run continues the journal it already has, so its RunStarted is the one
+		// event that legitimately follows a terminal one: it opens a new attempt on the
+		// same record. Everything else after a close is a record contradicting itself, and
+		// stays refused — relaxing the check wholesale would make a lost LevelClosed
+		// indistinguishable from a run that was genuinely picked up again.
+		if _, reopens := ev.Payload.(journal.RunStarted); !reopens {
+			return fmt.Errorf("projection: event %d (seq %d) arrives after the run was already closed by %s", index, ev.Seq, p.closedBy)
+		}
+		p.closedBy = ""
+		// The previous attempt's unclosed level is dropped rather than carried into the new
+		// one. The engine aborts and restarts a level as a whole, so that level combined
+		// nothing into the shared state; keeping it open would make the resumed attempt's
+		// own LevelOpened look like a second level opened inside the first.
+		p.level = nil
 	}
 
 	switch payload := ev.Payload.(type) {
