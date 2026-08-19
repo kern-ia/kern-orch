@@ -19,3 +19,6 @@
 * **Update**: Issue 05 (#9, PR #21) merged into `dev`; issue closed.
 * **Update**: Issue 07 (#11, atomic journal and projection) started on `feature/atomic-journal-projection`.
 * **Update**: Issue 07 (#11, atomic journal and projection) implemented on `feature/atomic-journal-projection`; PR #22 open against `dev`.
+* **Update**: Issue 07 (#11, PR #22) merged into `dev`; issue closed.
+* **Update**: Issues 08 and 10 narrowed and split — issue 12 (#23, interrupted-tail closing) and issue 13 (#24, opt-in runtime equivalence check) created. Six of six issues so far overshot their size band because the no-table-driven-tests convention makes tests two to three times the implementation; the remaining work is cut finer to compensate.
+

@@ -1,9 +1,9 @@
 ---
 type: Issue
-title: "Enforce replay equivalence as an executed invariant"
+title: "Assert replay equivalence over real engine runs"
 description: "Assert over real engine runs that replaying a journal yields the run's final state, plus an opt-in runtime check."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T16:00:00Z
 epic: 1
 issue: 10
 slug: replay-equivalence-invariant
@@ -31,16 +31,12 @@ hand-built event slices.
 - A test helper that runs a graph end to end and asserts `Project(journal) == final live state`,
   applied across the cases that matter: a single-node frontier, a fan-out, a freeze (default and
   non-default carry-over), a nudge, an approval, and a nested subgraph.
-- An opt-in runtime check comparing projection against replay at level boundaries, **off by
-  default**, exposed as a validated `Config` field per CONVENTIONS.md's rule that
-  deployment-varying choices are configuration rather than constants and that a `DEFAULT_*`
-  constant or test hook is not configurability.
-- The runtime check fails loud, naming the divergent keys.
 
 ## Out of scope
 
-- Making the runtime check the default. It doubles the state work on every level of every run to
-  defend against a class of bug introduced in code, not in data.
+- The opt-in runtime check itself. Split out to issue 13: it is a configuration surface with its own
+  validation, its own env var and its own off-by-default behaviour, and it is useless until the
+  test-side equivalence here proves the comparison is right in the first place.
 - Coverage percentage targets. Decision 10 rejected a coverage-shaped acceptance set: it says
   nothing about whether the journal is complete, and coverage is not measured in this repo at all.
 
@@ -49,11 +45,8 @@ hand-built event slices.
 - [ ] Replay equivalence is asserted over real engine runs for: single-node frontier, fan-out,
       freeze with `DefaultCarryOver`, freeze with a non-default carry-over, nudge, approval, nested
       subgraph.
-- [ ] The runtime check is a validated `Config` field, defaults to off, and its env var is
-      documented alongside the others in `internal/config`.
-- [ ] With the check enabled, a deliberately corrupted projection is detected and the error names
-      the divergent keys.
-- [ ] With the check disabled, no additional projection work happens per level.
+- [ ] Each equivalence assertion is shown to be non-vacuous: a deliberately wrong projection makes it
+      fail, and the report says which mutation was used.
 - [ ] `go build ./...`, `go vet ./...` and `go test ./...` are green.
 - [ ] An OKF fiche is added under `docs/index/` for this branch, per CONVENTIONS.md.
 
