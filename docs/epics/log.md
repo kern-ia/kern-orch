@@ -29,3 +29,5 @@
 * **Update**: Issue 12 (#23, PR #28) merged into `dev`; issue closed.
 * **Update**: Issue 09 (#13, nested subgraph journals) started on `feature/nested-subgraph-journals`.
 * **Update**: Issue 09 (#13, nested subgraph journals) implemented on `feature/nested-subgraph-journals`; PR #29 open against `dev`.
+* **Update**: Issue 06 (#10, non-node mutations as events) implemented on `feature/non-node-mutations-as-events`; PR #26 merged into `dev`; issue closed.
+* **Update**: Issue 09 (#13, PR #29) merged into `dev`; issue closed.

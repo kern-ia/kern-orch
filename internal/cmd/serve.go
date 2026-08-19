@@ -107,7 +107,11 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 	hook := multiStep(
 		checkpointHook(recorder, p.graphPath, p.requester, p.dossier),
 		steps.count,
-		p.reporter.Hook(runID, p.name, describeTopology(p.graphPath)),
+		// reportHook is issue 11's rewiring: the reporter's own StepFunc now flattens the
+		// state the journal projects to, read back from the same store checkpointHook just
+		// wrote this level's events into, rather than the engine's live *graph.State handed
+		// to this hook by OnStep.
+		reportHook(store, runID, p.reporter.Hook(runID, p.name, describeTopology(p.graphPath))),
 	)
 
 	// OnEvent is what makes the journal exist at all: until it is registered the engine's
