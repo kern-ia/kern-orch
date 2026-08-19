@@ -35,3 +35,4 @@
 * **Update**: Issue 10 (#14, replay equivalence over real engine runs) implemented on `feature/replay-equivalence`; PR #30 open against `dev`. Test-only: the eight cases are asserted through the engine and the recorder, and each is proven non-vacuous by a named mutation.
 * **Update**: Issue 10 (#14, PR #30) merged into `dev`; issue closed.
 * **Update**: Issue 11 (#15, rewire the reporter to project the journal) started on `feature/reporter-consumes-journal`.
+* **Update**: Issue 11 (#15, rewire the reporter to project the journal) implemented on `feature/reporter-consumes-journal`; PR #31 open against `dev`. `internal/report` has zero diff; the rewiring lives entirely in `internal/cmd` (`reportHook`, `journalRecorder.flush` for nested runs).
