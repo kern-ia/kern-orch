@@ -15,6 +15,7 @@ import (
 	"github.com/yoann/kern-orch/internal/checkpoint"
 	"github.com/yoann/kern-orch/internal/config"
 	"github.com/yoann/kern-orch/internal/graph"
+	"github.com/yoann/kern-orch/internal/journal"
 )
 
 // seedConfirmGraph produces state (n=3) in its first level and then parks on an approval, so
@@ -97,8 +98,8 @@ func waitForFrontier(t *testing.T, store *checkpoint.SQLiteStore, runID, node st
 //
 // It does not wait for a terminal event: a stopped run's own closing events are written with
 // the run's cancelled context, so the write is refused and the journal simply stops after the
-// last level that closed. Making that tail explicit is issue 12's; this test only needs the
-// record to be still.
+// last level that closed. That silence is what resume turns into a recorded interruption
+// (checkpoint.closeInterruptedTail); the callers here only need the record to be still.
 func waitUntilNotLive(t *testing.T, d *daemonRunner, runID string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -169,6 +170,70 @@ func TestResumeIgnoresACorruptedRowAndReplaysTheJournal(t *testing.T) {
 	}
 	if !decided {
 		t.Fatalf("no level ran after the resume; states seen: %v", sink.states())
+	}
+}
+
+// The interruption made explicit, on a real run rather than a hand-built journal: a run is
+// started, stopped in flight, and resumed. Its own terminal events were never written — they
+// go through the run's cancelled context, which refuses them — so the record ends mid-story,
+// and resume is what turns that silence into a fact. The whole point is that the fact is
+// identifiable afterwards: an event nobody witnessed must not read like one that was.
+func TestResumingAStoppedRunRecordsTheInterruptionInItsJournal(t *testing.T) {
+	dir := t.TempDir()
+	graphPath := filepath.Join(dir, "seed-confirm.yaml")
+	if err := os.WriteFile(graphPath, []byte(seedConfirmGraph), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := openDaemonStore(t, dir)
+	ctx := context.Background()
+	d := &daemonRunner{cfg: config.Config{}, store: store}
+
+	runID, err := d.StartRun(ctx, graphPath, "yoann")
+	if err != nil {
+		t.Fatalf("StartRun: %v", err)
+	}
+	waitForFrontier(t, store, runID, "confirm")
+	if err := d.StopRun(ctx, runID, "yoann"); err != nil {
+		t.Fatalf("StopRun: %v", err)
+	}
+	waitUntilNotLive(t, d, runID)
+
+	stopped, err := store.Read(ctx, runID)
+	if err != nil {
+		t.Fatalf("Read the stopped run's journal: %v", err)
+	}
+	for i, ev := range stopped {
+		switch ev.Payload.(type) {
+		case journal.RunFinished, journal.RunFailed, journal.RunInterrupted:
+			t.Fatalf("event %d (%T) closes the stopped run's journal; the premise of this test is that nothing did", i+1, ev.Payload)
+		}
+	}
+
+	if err := d.ResumeRun(ctx, runID); err != nil {
+		t.Fatalf("ResumeRun: %v", err)
+	}
+	decideWhenWaiting(t, d, runID)
+	waitForRun(t, store, runID, checkpoint.StatusDone)
+
+	events, err := store.Read(ctx, runID)
+	if err != nil {
+		t.Fatalf("Read the resumed run's journal: %v", err)
+	}
+	interruption := events[len(stopped)]
+	if _, ok := interruption.Payload.(journal.RunInterrupted); !ok {
+		t.Fatalf("event %d is %T, want journal.RunInterrupted right where the stopped record ended", len(stopped)+1, interruption.Payload)
+	}
+	if !interruption.Synthetic {
+		t.Fatal("the interruption is not marked synthetic; a reader would take it for an event the run itself emitted")
+	}
+	for i, ev := range events[:len(stopped)] {
+		if ev.Synthetic {
+			t.Fatalf("event %d (%T) was recorded as it happened but is marked synthetic", i+1, ev.Payload)
+		}
+	}
+	if _, ok := events[len(events)-1].Payload.(journal.RunFinished); !ok {
+		t.Fatalf("last event is %T, want journal.RunFinished — the resumed attempt ran to its end on the reopened record",
+			events[len(events)-1].Payload)
 	}
 }
 

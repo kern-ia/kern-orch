@@ -3,6 +3,7 @@ package journal
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -194,5 +195,33 @@ func TestDecodingAnEventWithNoKindFailsLoud(t *testing.T) {
 	err := json.Unmarshal([]byte(raw), &got)
 	if err == nil {
 		t.Fatalf("Unmarshal(%s) = nil error, want a failure for the missing kind", raw)
+	}
+}
+
+func TestASyntheticEventKeepsItsMarkingThroughJSON(t *testing.T) {
+	want := Event{
+		RunID: "run-1", Seq: 12, At: sampleTime(), Synthetic: true,
+		Payload: RunInterrupted{Reason: "no terminal event"},
+	}
+	got := roundTrip(t, want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("round trip = %+v, want %+v", got, want)
+	}
+	if !got.Synthetic {
+		t.Fatal("round trip lost the synthetic marking, so a reader cannot tell a reconstructed event from an observed one")
+	}
+}
+
+// The marking must cost an observed event nothing on the wire. Journals already written
+// carry no such field, and a run recorded as it happened must keep encoding to the exact
+// bytes it did before this field existed — otherwise every event in the table changes the
+// day the vocabulary gains a flag that does not apply to it.
+func TestAnObservedEventEncodesWithNoSyntheticField(t *testing.T) {
+	b, err := json.Marshal(Event{RunID: "run-1", Seq: 1, At: sampleTime(), Payload: RunFinished{}})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(b), "synthetic") {
+		t.Fatalf("observed event encoded as %s, want no synthetic field at all", b)
 	}
 }
