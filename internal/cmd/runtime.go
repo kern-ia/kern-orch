@@ -302,7 +302,16 @@ func failedNodes(err error) []string {
 // nested run gets one whenever cfg's checkpoint store can be opened at all, with no separate
 // switch to leave off by accident.
 func nestedRuns(reg *topology.Registry, reporter *report.HTTPReporter, cfg config.Config, parentRun string) {
-	reg.OnChildRun(func(nodeID, graphRef string) *graph.ChildRunHooks {
+	reg.OnChildRun(buildChildRunHooks(reporter, cfg, parentRun))
+}
+
+// buildChildRunHooks is nestedRuns' factory, split out so it can be exercised directly: the
+// only way to reach it through reg.OnChildRun is by building and running a real graph, which
+// would make every case here — the fresh id per call, journalling without a reporter, best-
+// effort degradation when the store cannot open — an integration test when each is a fact
+// about this one function.
+func buildChildRunHooks(reporter *report.HTTPReporter, cfg config.Config, parentRun string) func(nodeID, graphRef string) *graph.ChildRunHooks {
+	return func(nodeID, graphRef string) *graph.ChildRunHooks {
 		runID := newRunID()
 		name := graphName(graphRef)
 		hooks := &graph.ChildRunHooks{}
@@ -335,7 +344,7 @@ func nestedRuns(reg *topology.Registry, reporter *report.HTTPReporter, cfg confi
 			return nil
 		}
 		return hooks
-	})
+	}
 }
 
 // wireApproval binds a run's mailbox as the decision source for every approval node in
