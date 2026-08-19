@@ -47,16 +47,29 @@ func (m *Mailbox) Nudge(key string, value any) {
 }
 
 // DrainNudges applies every queued nudge to s and empties the queue — a nudge applies
-// exactly once, to the next level that starts after it arrived.
-func (m *Mailbox) DrainNudges(s *graph.State) {
+// exactly once, to the next level that starts after it arrived. It returns what it applied,
+// nil when nothing was queued.
+//
+// The return value exists because a nudge is the one write to the shared state that passes
+// through no node: nothing else in the run observes it, so a caller that has to record what
+// happened to the state has no other way to learn of it. A map rather than the queue's own
+// order because that is what the state ends up holding — a key nudged twice keeps the last
+// value, exactly as the loop below leaves it.
+func (m *Mailbox) DrainNudges(s *graph.State) map[string]any {
 	m.mu.Lock()
 	pending := m.nudges
 	m.nudges = nil
 	m.mu.Unlock()
 
+	if len(pending) == 0 {
+		return nil
+	}
+	applied := make(map[string]any, len(pending))
 	for _, n := range pending {
 		s.Set(n.key, n.value)
+		applied[n.key] = n.value
 	}
+	return applied
 }
 
 // AwaitDecision blocks until Decide is called for nodeID, or ctx is cancelled — a stop

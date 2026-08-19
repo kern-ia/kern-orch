@@ -108,3 +108,31 @@ func TestStopWithNoCancelFuncIsSafe(t *testing.T) {
 	m := NewMailbox(nil)
 	m.Stop() // must not panic
 }
+
+// The applied pairs come back so the caller can record the write. A nudge mutates the shared
+// state without passing through any node, so nothing else in the run knows it happened —
+// which, once the checkpoint row is a projection of the journal, means the row loses it.
+func TestDrainNudgesReturnsWhatItApplied(t *testing.T) {
+	m := NewMailbox(nil)
+	m.Nudge("probe", "hello")
+	m.Nudge("probe", "hello again")
+	m.Nudge("other", 2)
+
+	applied := m.DrainNudges(graph.NewState())
+
+	if len(applied) != 2 {
+		t.Fatalf("applied = %v, want two keys", applied)
+	}
+	if applied["probe"] != "hello again" {
+		t.Fatalf("applied[probe] = %v, want the last value queued for that key", applied["probe"])
+	}
+	if applied["other"] != 2 {
+		t.Fatalf("applied[other] = %v, want 2", applied["other"])
+	}
+}
+
+func TestDrainNudgesReturnsNothingWhenTheQueueIsEmpty(t *testing.T) {
+	if applied := NewMailbox(nil).DrainNudges(graph.NewState()); len(applied) != 0 {
+		t.Fatalf("applied = %v, want nothing", applied)
+	}
+}
