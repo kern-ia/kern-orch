@@ -8,7 +8,7 @@ epic: 1
 issue: 07
 slug: atomic-journal-and-projection
 size: M
-status: pr-open
+status: done
 gh_issue: 11
 gh_pr: 22
 resource: https://github.com/kern-ia/kern-orch/issues/11

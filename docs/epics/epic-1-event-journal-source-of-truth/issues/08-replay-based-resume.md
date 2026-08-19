@@ -1,9 +1,9 @@
 ---
 type: Issue
-title: "Resume by replaying the journal, closing an interrupted tail"
-description: "resume rebuilds state from events rather than trusting the cache, and an interrupted run's tail becomes an explicit fact."
+title: "Resume by replaying the journal"
+description: "resume rebuilds state from events rather than trusting the cached projection row."
 tags: [epic-1]
-timestamp: 2026-08-19T10:20:00Z
+timestamp: 2026-08-19T16:00:00Z
 epic: 1
 issue: 08
 slug: replay-based-resume
@@ -14,7 +14,7 @@ resource: https://github.com/kern-ia/kern-orch/issues/12
 depends_on: [4, 7]
 ---
 
-# Resume by replaying the journal, closing an interrupted tail
+# Resume by replaying the journal
 
 ## Summary
 
@@ -34,27 +34,23 @@ than an ambiguity.
 ## Scope
 
 - `resume` reads the run's events and projects the state, rather than taking the cached row's state.
-- Before replaying, detect an unclosed tail — a level opened and never closed, nodes started and
-  never resolved — and **append explicit synthetic events** closing it and marking the run
-  interrupted. The synthetic events are ordinary journal records, distinguishable as synthetic.
-- The frontier resume restarts from is derived from the closed journal.
+- The frontier resume restarts from is derived from the journal.
 - The graph path keeps travelling in the projection row, so `resume <run-id>` still needs no graph
   argument.
 
 ## Out of scope
 
-- Retrying or partially re-executing the nodes that had completed in the interrupted level. Resume
-  keeps restarting the level; this issue only makes the interruption visible and the state exact.
+- Detecting and closing an interrupted tail. Split out to issue 12: a run killed mid-level leaves a
+  level opened and never closed, and turning that into explicit synthetic events is its own
+  capability with its own tests. This issue assumes a coherent journal.
+- Retrying or partially re-executing the nodes that had completed in a level. Resume keeps
+  restarting the level.
 - The equivalence check — issue 10.
 
 ## Acceptance criteria
 
 - [ ] `resume` on a cleanly checkpointed run produces exactly the state the run had, derived by
       replay, and the run completes as before.
-- [ ] A run killed mid-level, then resumed, has synthetic tail-closing events appended, is marked
-      interrupted in its journal, and resumes from the correct frontier.
-- [ ] The interruption is visible when reading the journal afterwards — a test asserts the
-      synthetic events are present and identifiable as synthetic.
 - [ ] Deliberately corrupting the cached projection row does **not** change what `resume`
       reconstructs.
 - [ ] `resume <run-id>` still works with no graph argument.
