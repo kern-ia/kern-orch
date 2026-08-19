@@ -176,42 +176,70 @@ func isMissingSchemaMeta(err error) bool {
 	return strings.Contains(err.Error(), "no such table: schema_meta")
 }
 
-// Save upserts the checkpoint for (RunID, Step).
-func (s *SQLiteStore) Save(ctx context.Context, r Record) error {
-	if r.RunID == "" {
-		return ErrEmptyRunID
-	}
-	frontier, err := json.Marshal(r.Frontier)
-	if err != nil {
-		return fmt.Errorf("checkpoint: marshal frontier: %w", err)
-	}
-	state, err := json.Marshal(r.State)
-	if err != nil {
-		return fmt.Errorf("checkpoint: marshal state: %w", err)
-	}
-	created := r.CreatedAt
-	if created.IsZero() {
-		created = time.Now().UTC()
-	}
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO checkpoints (run_id, step, frontier, state, status, created_at, graph_path, requester, dossier)
+// upsertCheckpoint is the one statement that writes a checkpoint row. It is a package
+// constant rather than a literal at each call site because two of them exist — Save, and the
+// transaction that writes the row atomically with its events (atomic.go) — and a column
+// added to Record must not be able to land in one and be forgotten in the other.
+const upsertCheckpoint = `INSERT INTO checkpoints (run_id, step, frontier, state, status, created_at, graph_path, requester, dossier)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(run_id, step) DO UPDATE SET
 		   frontier=excluded.frontier, state=excluded.state,
 		   status=excluded.status, created_at=excluded.created_at, graph_path=excluded.graph_path,
-		   requester=excluded.requester, dossier=excluded.dossier`,
-		r.RunID, r.Step, string(frontier), string(state), r.Status, created.Format(time.RFC3339Nano), r.GraphPath, r.Requester, r.Dossier)
+		   requester=excluded.requester, dossier=excluded.dossier`
+
+// Save upserts the checkpoint for (RunID, Step).
+//
+// It writes the state the caller supplies, which is why it is no longer the path a running
+// engine takes: a row written this way is a claim about a level, not a projection of it (see
+// atomic.go). What is left for it is the one row that legitimately precedes every event —
+// the queued marker at QueuedStep, written the instant a run is accepted, when there is no
+// journal to derive anything from yet.
+func (s *SQLiteStore) Save(ctx context.Context, r Record) error {
+	if r.RunID == "" {
+		return ErrEmptyRunID
+	}
+	frontier, state, created, err := encodeRecord(r)
 	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, upsertCheckpoint,
+		r.RunID, r.Step, frontier, state, r.Status, created, r.GraphPath, r.Requester, r.Dossier); err != nil {
 		return fmt.Errorf("checkpoint: save: %w", err)
 	}
 	return nil
 }
 
+// encodeRecord renders the three columns a Record does not carry as plain strings: the
+// frontier and the state as JSON, and the timestamp defaulted to now when the caller left it
+// zero. Shared by both writers so the on-disk shape has a single producer.
+func encodeRecord(r Record) (frontier, state, created string, err error) {
+	fr, err := json.Marshal(r.Frontier)
+	if err != nil {
+		return "", "", "", fmt.Errorf("checkpoint: marshal frontier: %w", err)
+	}
+	st, err := json.Marshal(r.State)
+	if err != nil {
+		return "", "", "", fmt.Errorf("checkpoint: marshal state: %w", err)
+	}
+	at := r.CreatedAt
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	return string(fr), string(st), at.Format(time.RFC3339Nano), nil
+}
+
 // Latest returns the highest-step checkpoint for runID; ok is false if none exists.
 func (s *SQLiteStore) Latest(ctx context.Context, runID string) (Record, bool, error) {
-	row := s.db.QueryRowContext(ctx,
+	return scanRecord(runID, s.db.QueryRowContext(ctx,
 		`SELECT step, frontier, state, status, created_at, graph_path, requester, dossier
-		 FROM checkpoints WHERE run_id = ? ORDER BY step DESC LIMIT 1`, runID)
+		 FROM checkpoints WHERE run_id = ? ORDER BY step DESC LIMIT 1`, runID))
+}
+
+// scanRecord decodes one checkpoint row. It takes the *sql.Row rather than running the query
+// itself so the same decoding serves a read through the pool and a read through an open
+// transaction (atomic.go), which is the only way a reprojection can see the row it is about
+// to overwrite rather than the one committed before it.
+func scanRecord(runID string, row *sql.Row) (Record, bool, error) {
 	var (
 		step                                          int
 		frontier, state                               string

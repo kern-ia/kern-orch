@@ -89,22 +89,36 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 	defer p.reporter.Flush()
 	defer p.activityReporter.Flush()
 
+	// Built before the engine, and a failure here stops the run before it starts: the
+	// recorder reads where this run's journal left off, and a run that cannot know its own
+	// next sequence number cannot be recorded at all. Starting anyway would produce a run
+	// whose events are refused level after level.
+	recorder, err := newJournalRecorder(ctx, store, runID, p.name)
+	if err != nil {
+		return err
+	}
+
 	steps := &stepCounter{}
 	hook := multiStep(
-		checkpointHook(store, runID, p.graphPath, p.requester, p.dossier),
+		checkpointHook(recorder, p.graphPath, p.requester, p.dossier),
 		steps.count,
 		p.reporter.Hook(runID, p.name, describeTopology(p.graphPath)),
 	)
 
-	engine := graph.NewEngine(p.graph).OnStep(hook)
+	// OnEvent is what makes the journal exist at all: until it is registered the engine's
+	// emit is the nil no-op. It is chained through multiEvent even with a single hook, so a
+	// later observer (issue 11's reporter) is added without touching this line.
+	engine := graph.NewEngine(p.graph).OnStep(hook).OnEvent(multiEvent(recorder.record))
 	if p.mailbox != nil {
-		engine.OnBeforeLevel(func(_ context.Context, s *graph.State) error {
-			p.mailbox.DrainNudges(s)
-			return nil
+		engine.OnBeforeLevel(func(ctx context.Context, s *graph.State) error {
+			// Recorded, not just applied: a nudge is the one write to the shared state that
+			// passes through no node, so the journal would otherwise never hear of it — and
+			// the row, now derived from the journal, would lose the very key the steer
+			// endpoint was called to set.
+			return recorder.recordNudge(ctx, p.mailbox.DrainNudges(s))
 		})
 	}
 
-	var err error
 	if resume != nil {
 		steps.last = resume.Step
 		err = engine.RunFrom(ctx, resume.State, resume.Frontier)

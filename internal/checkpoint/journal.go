@@ -198,7 +198,20 @@ func (s *SQLiteStore) ReadFrom(ctx context.Context, runID string, fromSeq int64)
 		return nil, fmt.Errorf("checkpoint: read run %q from seq %d, sequence numbers start at %d: %w",
 			runID, fromSeq, FirstSeq, ErrInvalidSeq)
 	}
-	rows, err := s.db.QueryContext(ctx,
+	return readEventsFrom(ctx, s.db, runID, fromSeq)
+}
+
+// eventQuerier is what readEventsFrom needs of its source: the connection pool, or an open
+// transaction. Both satisfy it, which is what lets the projection written together with a
+// level's events (atomic.go) replay the rows that transaction just inserted — rows no other
+// reader can see yet — through the same decoding as a plain read rather than a second copy
+// of it that could drift.
+type eventQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func readEventsFrom(ctx context.Context, q eventQuerier, runID string, fromSeq int64) ([]journal.Event, error) {
+	rows, err := q.QueryContext(ctx,
 		`SELECT event FROM events WHERE run_id = ? AND seq >= ? ORDER BY seq`, runID, fromSeq)
 	if err != nil {
 		return nil, fmt.Errorf("checkpoint: read run %q: %w", runID, err)

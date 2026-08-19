@@ -158,21 +158,17 @@ func openStore(cfg config.Config) (*checkpoint.SQLiteStore, error) {
 	return checkpoint.OpenSQLite(cfg.CheckpointDB)
 }
 
-// checkpointHook persists the state after each level under runID, recording graphPath
-// so `resume` can reload the graph without the caller re-supplying it, requester so
-// C6's write path knows who may steer this run (empty means anyone may), and dossier so
-// a consumer like kern-ui can group this run under a case (empty means none).
-func checkpointHook(store *checkpoint.SQLiteStore, runID, graphPath, requester, dossier string) graph.StepFunc {
-	return func(ctx context.Context, info graph.StepInfo, s *graph.State) error {
-		status := checkpoint.StatusRunning
-		if len(info.Frontier) == 0 {
-			status = checkpoint.StatusDone
-		}
-		return store.Save(ctx, checkpoint.Record{
-			RunID: runID, Step: info.Step, Frontier: info.Frontier, State: s,
-			Status: status, GraphPath: graphPath, Requester: requester, Dossier: dossier,
-		})
-	}
+// checkpointHook persists a level under the recorder's run: the level's journal events and
+// the projection row derived from them, in one transaction (see journalRecorder.checkpoint).
+// It records graphPath so `resume` can reload the graph without the caller re-supplying it,
+// requester so C6's write path knows who may steer this run (empty means anyone may), and
+// dossier so a consumer can group this run under a case (empty means none).
+//
+// It no longer takes the store or the run id: both are the recorder's, and the state it once
+// marshalled is now derived from the events rather than supplied. That is the whole change —
+// the row is a projection of the journal, not a second record kept beside it.
+func checkpointHook(rec *journalRecorder, graphPath, requester, dossier string) graph.StepFunc {
+	return rec.checkpoint(graphPath, requester, dossier)
 }
 
 // multiStep chains several step hooks into the single one Engine.OnStep accepts. Hooks run
