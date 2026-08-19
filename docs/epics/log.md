@@ -10,3 +10,4 @@
 * **Update**: Issue 02 (#6, journal event vocabulary) implemented on `feature/journal-event-vocabulary`; PR #18 open against `dev`.
 * **Update**: Issue 02 (#6, PR #18) merged into `dev`; issue closed.
 * **Update**: Issue 03 (#7, journal store append/read) started on `feature/journal-store`.
+* **Update**: Issue 03 (#7, journal store append/read) implemented on `feature/journal-store`; PR #19 open against `dev`.
