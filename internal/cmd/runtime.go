@@ -23,8 +23,6 @@ import (
 	"github.com/yoann/kern-orch/internal/topology"
 )
 
-// newRunner returns the real subprocess runner when KERN_AGENT_CLI is set, otherwise the
-// deterministic stub so the harness runs with no LLM configured.
 // activityRelay is the seam between the runner and the reporter. The runner is built before
 // the run has an id, so the hook cannot be written at construction time; the relay is handed
 // over empty and filled once the id exists. A nil target is a no-op, which is what an
@@ -39,16 +37,20 @@ func (a *activityRelay) call(nodeID string, generating bool, message string) {
 	}
 }
 
-func newRunner(cfg config.Config, activity *activityRelay) graph.AgentRunner {
-	if r, ok := agentrunner.NewSubprocessFromEnv(); ok {
-		r.Stderr = os.Stderr
-		r.TokenSink = os.Stderr
-		if activity != nil {
-			r.OnActivity = activity.call
-		}
-		return r
+// newRunner asks agentrunner's registry which adapter cfg selects, handing it the streams
+// and the activity hook that live on this side of the boundary.
+//
+// It now returns an error: which CLI is configured is no longer a yes/no question this
+// package can answer from one env var, and a kind the registry does not recognize — or one
+// whose adapter is not built yet — has to stop the run at construction. Falling back to the
+// stub, as the pre-registry code did for any unusable CLI, would let a run answer with canned
+// output while looking like it really called the model.
+func newRunner(cfg config.Config, activity *activityRelay) (graph.AgentRunner, error) {
+	opts := agentrunner.Options{Stderr: os.Stderr, TokenSink: os.Stderr}
+	if activity != nil {
+		opts.OnActivity = activity.call
 	}
-	return &agentrunner.Stub{}
+	return agentrunner.New(cfg, opts)
 }
 
 // builtinRegistry wires the built-in tool/router functions available to every graph.
