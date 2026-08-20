@@ -28,19 +28,21 @@ type constructor func(cfg config.Config, opts Options) (graph.AgentRunner, error
 
 // adapters maps a config.AgentKind* value to the adapter that speaks that CLI's protocol.
 //
-// The opencode entry is still a placeholder (issue 05). A placeholder returns an error naming
-// the missing adapter rather than falling back to Stub, because a stub answering a run that
-// asked for a real CLI produces plausible canned output — a failure that looks like a success
-// is worse here than no run at all.
+// Every kind maps to a real adapter now that issues 04 and 05 have both landed.
 var adapters = map[string]constructor{
 	config.AgentKindClaudeCode: newClaudeCode,
-	config.AgentKindOpenCode:   notImplemented(config.AgentKindOpenCode),
+	config.AgentKindOpenCode:   newOpenCode,
 }
 
-func notImplemented(kind string) constructor {
-	return func(config.Config, Options) (graph.AgentRunner, error) {
-		return nil, fmt.Errorf("agentrunner: the %q adapter is not implemented yet", kind)
-	}
+// newOpenCode builds the HTTP-backed OpenCode adapter. It also satisfies Lifecycle, which is
+// what makes serve.go start its server once for the whole run instead of per node.
+func newOpenCode(cfg config.Config, opts Options) (graph.AgentRunner, error) {
+	return &OpenCode{
+		Path:       cfg.AgentCLI,
+		Stderr:     opts.Stderr,
+		TokenSink:  opts.TokenSink,
+		OnActivity: opts.OnActivity,
+	}, nil
 }
 
 // New selects the AgentRunner for cfg. No AgentCLI configured is the harness's LLM-less mode
