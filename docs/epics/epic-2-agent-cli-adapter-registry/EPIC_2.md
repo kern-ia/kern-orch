@@ -70,10 +70,13 @@ message shapes internally and exposes only `graph.AgentResult` plus writes to th
 message envelope and OpenCode's `{ info: Message, parts: Part[] }` response are structurally
 unrelated; no shared intermediate `Event` type is imposed across them.
 
-**Documentation.** `kern-exec`'s `wrap-agent-cli.sh` and `wrap-agent-cli-through-firewall.sh`
-examples updated to show both adapters wired through `kern-exec`'s confinement — the whole
-point of the composition model is that neither example needs a code change, only the
-`KERN_AGENT_CLI`/`KERN_AGENT_KIND` pair and the wrapped binary.
+**Documentation, filed outside this epic.** `kern-exec`'s `wrap-agent-cli.sh` and
+`wrap-agent-cli-through-firewall.sh` examples need updating to show both adapters wired
+through `kern-exec`'s confinement — the whole point of the composition model is that neither
+example needs a code change, only the `KERN_AGENT_CLI`/`KERN_AGENT_KIND` pair and the wrapped
+binary. That work lands in a different repository, so it is tracked as
+[kern-exec#1](https://github.com/kern-ia/kern-exec/issues/1) rather than as a sub-issue of
+this epic — `create-issues`/`implement-epic`'s GitHub wiring assumes one repo per epic.
 
 ## Out of scope
 
@@ -113,8 +116,10 @@ point of the composition model is that neither example needs a code change, only
       `claude -p --output-format=stream-json` and through `opencode serve`), self-skipping when
       the binary is absent — the same convention this repo's own `test:e2e` already uses for
       `DEEPSEEK_API_KEY`.
-- [ ] `kern-exec`'s wrapper-script examples are updated for both adapters.
-- [ ] `go build ./...`, `go vet ./...` and `go test ./...` are green.
+- [ ] `go build ./...`, `go vet ./...` and `go test ./...` are green. (`kern-exec`'s
+      wrapper-script update is tracked separately at
+      [kern-exec#1](https://github.com/kern-ia/kern-exec/issues/1), not a criterion of this
+      epic.)
 - [ ] An OKF fiche exists under `docs/index/` for each merged feature branch of this epic.
 
 ## Dependencies
