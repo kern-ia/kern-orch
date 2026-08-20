@@ -3,12 +3,12 @@ type: Issue
 title: "Implement the Claude Code adapter"
 description: "A stdio adapter speaking Claude Code's real -p --input-format=stream-json --output-format=stream-json protocol, translating its messages into AgentResult and the existing TokenSink/OnActivity contracts."
 tags: [epic-2]
-timestamp: 2026-08-20T11:30:00Z
+timestamp: 2026-08-20T15:00:00Z
 epic: 2
 issue: 04
 slug: claude-code-adapter
 size: M
-status: open
+status: in-progress
 gh_issue: 38
 resource: https://github.com/kern-ia/kern-orch/issues/38
 depends_on: [1, 2, 3]
