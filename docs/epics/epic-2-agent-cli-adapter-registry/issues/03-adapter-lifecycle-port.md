@@ -3,12 +3,12 @@ type: Issue
 title: "Add the Start/Close adapter lifecycle, wired around a run"
 description: "Extend the adapter contract with an explicit Start(ctx)/Close() lifecycle called once per run - not per node - with Close guaranteed on every exit path including stop."
 tags: [epic-2]
-timestamp: 2026-08-20T11:30:00Z
+timestamp: 2026-08-20T15:10:00Z
 epic: 2
 issue: 03
 slug: adapter-lifecycle-port
 size: S
-status: open
+status: in-progress
 gh_issue: 37
 resource: https://github.com/kern-ia/kern-orch/issues/37
 depends_on: [2]
