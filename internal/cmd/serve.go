@@ -173,7 +173,7 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 }
 
 // startAdapter starts this run's agent adapter when it declares a lifecycle, and does
-// nothing at all otherwise — an adapter with no long-lived resource (Stub, Subprocess,
+// nothing at all otherwise — an adapter with no long-lived resource (Stub, ClaudeCode,
 // which spawns its child per call by design) never sees a new call.
 //
 // A start failure is fatal to the run: an adapter that could not come up would fail every
@@ -356,7 +356,7 @@ func notLive(runID string) error {
 }
 
 // StopRun cancels a live run's context. The same mechanism already kills an in-flight
-// subprocess node (agentrunner.Subprocess uses exec.CommandContext) — stopping a run is
+// subprocess node (agentrunner.ClaudeCode uses exec.CommandContext) — stopping a run is
 // just that, triggered by a person instead of a timeout.
 func (d *daemonRunner) StopRun(ctx context.Context, runID, actor string) error {
 	rec, ok, err := d.store.Latest(ctx, runID)
