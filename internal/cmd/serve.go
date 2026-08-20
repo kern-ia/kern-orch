@@ -63,7 +63,11 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 
 	// Wired before the graph is built, not after: a subgraph node receives its hook at
 	// construction time.
-	reg := builtinRegistry(newRunner(cfg, activity), cfg)
+	runner, err := newRunner(cfg, activity)
+	if err != nil {
+		return nil, err
+	}
+	reg := builtinRegistry(runner, cfg)
 	nestedRuns(reg, reporter, cfg, runID)
 	wireApproval(reg, mailbox, activity)
 
@@ -505,7 +509,10 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dos
 	reporter.Token = cfg.SinkToken
 	reporter.Requester = requester
 	reporter.Dossier = dossier
-	runner := newRunner(cfg, activity)
+	runner, err := newRunner(cfg, activity)
+	if err != nil {
+		return nil, err
+	}
 
 	g := graph.NewGraph().SetEntry(skillName).AddNode(graph.NewAgentNode(skillName, prompt, runner))
 	if err := g.Validate(); err != nil {
