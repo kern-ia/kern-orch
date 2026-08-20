@@ -8,7 +8,7 @@ epic: 2
 issue: 02
 slug: adapter-registry-and-kind-selection
 size: M
-status: pr-open
+status: done
 gh_issue: 36
 gh_pr: 44
 resource: https://github.com/kern-ia/kern-orch/issues/36

@@ -45,3 +45,4 @@
 * **Update**: reconciled issue 01 (#35, PR #42) to done — merged and closed on GitHub since 2026-08-20, still recorded pr-open in the bundle.
 * **Update**: Issue 02 (#36, adapter registry and KERN_AGENT_KIND selection) started on `feature/adapter-registry-and-kind-selection`.
 * **Update**: Issue 02 (#36, adapter registry and KERN_AGENT_KIND selection) implemented on `feature/adapter-registry-and-kind-selection`; PR #44 open against `dev`. No kind selects the old `Subprocess` JSON-lines placeholder any more, so `TestRunBracketsAgentActivity` was repurposed to assert the new loud refusal; the activity chain's end-to-end coverage returns with the first real adapter (issue 04).
+* **Update**: Issue 02 (#36, PR #44) merged into dev; issue closed.
