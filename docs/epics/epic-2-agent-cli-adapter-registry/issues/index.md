@@ -5,6 +5,6 @@
 * [Add the Start/Close adapter lifecycle, wired around a run](./03-adapter-lifecycle-port.md) - S, done (#37, PR #43)
 * [Implement the Claude Code adapter](./04-claude-code-adapter.md) - M, done (#38, PR #45)
 * [Implement the OpenCode adapter: spawn, session, and wire translation](./05-opencode-adapter.md) - M, done (#39, PR #46)
-* [Prove OpenCode fan-out calls stay concurrent, one session per call](./06-opencode-concurrent-sessions.md) - S, pr-open (#40, PR #47)
+* [Prove OpenCode fan-out calls stay concurrent, one session per call](./06-opencode-concurrent-sessions.md) - S, done (#40, PR #47)
 
 The wrapper-script documentation follow-up lives outside this epic's implement-epic scope: [kern-exec#1](https://github.com/kern-ia/kern-exec/issues/1).

@@ -8,7 +8,7 @@ epic: 2
 issue: 06
 slug: opencode-concurrent-sessions
 size: S
-status: pr-open
+status: done
 gh_issue: 40
 resource: https://github.com/kern-ia/kern-orch/issues/40
 gh_pr: 47

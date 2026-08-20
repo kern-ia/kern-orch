@@ -85,7 +85,10 @@ they translate independently into the same narrow, already-CLI-agnostic surface:
 
 ## Dependencies
 
-Blocked by issues 01, 02, 03. Blocks issue 07.
+Blocked by issues 01, 02, 03. Blocks nothing else within this epic — the wrapper-script
+documentation item this issue's PR partly informs is tracked separately at
+[kern-exec#1](https://github.com/kern-ia/kern-exec/issues/1), outside this epic's
+implement-epic scope.
 
 ## PR size note
 

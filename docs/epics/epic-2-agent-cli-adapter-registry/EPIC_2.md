@@ -3,10 +3,10 @@ type: Epic
 title: "Agent CLI adapter registry: Claude Code and OpenCode"
 description: "Replace the provisional, never-reconciled agentrunner protocol with a registry of adapters that speak each real CLI's actual protocol, so kern-orch can spawn and pilot Claude Code or OpenCode as graph nodes."
 tags: [epic, change]
-timestamp: 2026-08-20T10:00:00Z
+timestamp: 2026-08-20T17:45:00Z
 epic: 2
 slug: agent-cli-adapter-registry
-status: open
+status: done
 gh_issue: 33
 milestone: 2
 resource: https://github.com/kern-ia/kern-orch/issues/33
