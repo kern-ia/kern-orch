@@ -8,7 +8,7 @@ epic: 2
 issue: 04
 slug: claude-code-adapter
 size: M
-status: pr-open
+status: done
 gh_issue: 38
 resource: https://github.com/kern-ia/kern-orch/issues/38
 gh_pr: 45

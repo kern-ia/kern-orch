@@ -3,12 +3,12 @@ type: Issue
 title: "Prove OpenCode fan-out calls stay concurrent, one session per call"
 description: "A fan-out of agent nodes calling the OpenCode adapter must open one session per call and run genuinely in parallel - never serialized behind a lock."
 tags: [epic-2]
-timestamp: 2026-08-20T11:30:00Z
+timestamp: 2026-08-20T17:00:00Z
 epic: 2
 issue: 06
 slug: opencode-concurrent-sessions
 size: S
-status: open
+status: in-progress
 gh_issue: 40
 resource: https://github.com/kern-ia/kern-orch/issues/40
 depends_on: [5]
@@ -64,7 +64,9 @@ promises everywhere else.
 
 ## Dependencies
 
-Blocked by issue 05. Blocks issue 07.
+Blocked by issue 05. This is the last issue of epic 2 -- nothing in this epic depends on it
+(the "Blocks issue 07" line carried over from issue 04's file was stray: epic 2 only has
+issues 01-06).
 
 ## PR size note
 
