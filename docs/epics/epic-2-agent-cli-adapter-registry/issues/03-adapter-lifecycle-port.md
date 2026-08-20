@@ -8,7 +8,7 @@ epic: 2
 issue: 03
 slug: adapter-lifecycle-port
 size: S
-status: pr-open
+status: done
 gh_issue: 37
 gh_pr: 43
 resource: https://github.com/kern-ia/kern-orch/issues/37
