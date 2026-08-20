@@ -18,6 +18,16 @@ const (
 	EnvSkillsCustomDir = "KERN_SKILLS_CUSTOM_DIR"
 	EnvCheckpointDB    = "KERN_CHECKPOINT_DB"
 	EnvAgentCLI        = "KERN_AGENT_CLI"
+	// EnvAgentKind names which agent CLI EnvAgentCLI points at, selecting the adapter that
+	// knows that CLI's wire protocol. It is its own variable rather than something derived
+	// from EnvAgentCLI's path because the path is an operator's choice — a wrapper script, a
+	// version-pinned shim, a binary renamed for a fleet — and sniffing a kind out of it would
+	// make the harness guess at the one thing it cannot afford to get wrong: which protocol
+	// it is about to speak. Empty is legal only while EnvAgentCLI is empty too (the stub
+	// path); set one without the other and FromEnv refuses, because the alternative is a
+	// silent default that talks the wrong protocol to a real binary and fails deep inside a
+	// run instead of at load.
+	EnvAgentKind = "KERN_AGENT_KIND"
 	// EnvStepReportURL points at an HTTP sink receiving one POST per completed graph
 	// level. Unset means no reporting. The URL is the whole contract: kern-orch knows
 	// nothing of the sink's route shape.
@@ -70,6 +80,14 @@ const (
 	EnvRuntimeEquivalenceCheck = "KERN_RUNTIME_EQUIVALENCE_CHECK"
 )
 
+// Recognized values of EnvAgentKind. The list lives here rather than in agentrunner so
+// FromEnv can reject an unknown kind at load without config depending on the package that
+// implements the adapters — the dependency runs the other way (see CONVENTIONS.md).
+const (
+	AgentKindClaudeCode = "claude-code"
+	AgentKindOpenCode   = "opencode"
+)
+
 // Config is the resolved runtime configuration.
 type Config struct {
 	SkillsDir string
@@ -77,6 +95,9 @@ type Config struct {
 	CustomSkillsDir string
 	CheckpointDB    string
 	AgentCLI        string // path to external LLM CLI; empty => use the deterministic stub
+	// AgentKind selects the adapter that speaks AgentCLI's protocol; empty only when
+	// AgentCLI is empty too. See EnvAgentKind.
+	AgentKind string
 	// StepReportURL is an HTTP sink for step transitions; empty => no reporting.
 	StepReportURL string
 	// RegistryReportURL is an HTTP sink for the skills catalogue; empty => no publishing.
@@ -115,11 +136,18 @@ func FromEnv() (Config, error) {
 		return Config{}, err
 	}
 
+	agentCLI := os.Getenv(EnvAgentCLI)
+	agentKind, err := agentKindEnv(agentCLI)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		SkillsDir:               envOr(EnvSkillsDir, "skills"),
 		CustomSkillsDir:         envOr(EnvSkillsCustomDir, "skills-custom"),
 		CheckpointDB:            envOr(EnvCheckpointDB, "./data/kern-orch.db"),
-		AgentCLI:                os.Getenv(EnvAgentCLI),
+		AgentCLI:                agentCLI,
+		AgentKind:               agentKind,
 		StepReportURL:           os.Getenv(EnvStepReportURL),
 		RegistryReportURL:       os.Getenv(EnvRegistryReportURL),
 		ActivityReportURL:       os.Getenv(EnvActivityReportURL),
@@ -138,6 +166,31 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// agentKindEnv reads EnvAgentKind and checks it against agentCLI, the already-resolved value
+// of EnvAgentCLI. It reports an error rather than picking a default for the same reason
+// boolEnvOr does: a kind the harness guessed is a protocol mismatch discovered at the first
+// agent node of a real run, when the cheap place to discover it is here.
+//
+// The check is keyed on agentCLI being set, not on the kind being set, so the no-CLI stub
+// path keeps working untouched — that is the configuration every existing test and every
+// LLM-less deployment runs under.
+func agentKindEnv(agentCLI string) (string, error) {
+	kind := os.Getenv(EnvAgentKind)
+	if agentCLI == "" {
+		return "", nil
+	}
+	switch kind {
+	case AgentKindClaudeCode, AgentKindOpenCode:
+		return kind, nil
+	case "":
+		return "", fmt.Errorf("config: %s is set (%q) but %s is empty: set it to %q or %q",
+			EnvAgentCLI, agentCLI, EnvAgentKind, AgentKindClaudeCode, AgentKindOpenCode)
+	default:
+		return "", fmt.Errorf("config: %s: unknown agent kind %q: want %q or %q",
+			EnvAgentKind, kind, AgentKindClaudeCode, AgentKindOpenCode)
+	}
 }
 
 // boolEnvOr parses key as a bool, returning def when it is unset. An empty value is treated

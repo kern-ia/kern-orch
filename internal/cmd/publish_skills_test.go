@@ -156,9 +156,18 @@ func TestRunSurvivesADeadRegistrySink(t *testing.T) {
 	}
 }
 
-// The activity signal has to survive the whole wiring: runner hook → relay → reporter →
-// sink. Unit tests cover each link; only this one covers the chain.
-func TestRunBracketsAgentActivity(t *testing.T) {
+// This test used to assert the activity chain (runner hook → relay → reporter → sink) end to
+// end, driving it through a shell script that spoke agentrunner's own JSON-lines protocol.
+// That protocol is a placeholder no real CLI ever spoke, and the adapter registry retires it:
+// a bare KERN_AGENT_CLI no longer selects anything, so the script has nothing to be run by.
+//
+// The fixture is kept and pointed at what the same configuration does now — refuse the run at
+// config load, before a single node executes — because that is the criterion that replaced
+// it, and asserting it here (rather than only in config's own tests) proves the refusal
+// actually reaches the operator through the CLI. The activity chain's end-to-end coverage
+// comes back with the first real adapter (issues 04/05), which is the first thing that can
+// stand in for the script.
+func TestRunRefusesAnAgentCLIWithNoAgentKind(t *testing.T) {
 	sink := newCatalogueSink(t)
 	dir := t.TempDir()
 
@@ -172,25 +181,22 @@ func TestRunBracketsAgentActivity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("KERN_AGENT_CLI", agent)
+	t.Setenv(config.EnvAgentCLI, agent)
+	t.Setenv(config.EnvAgentKind, "")
 	t.Setenv(config.EnvActivityReportURL, sink.server.URL)
 	t.Setenv(config.EnvCheckpointDB, filepath.Join(dir, "k.db"))
 
-	if _, err := execute(t, "run", graphPath); err != nil {
-		t.Fatalf("run: %v", err)
+	_, err := execute(t, "run", graphPath)
+	if err == nil {
+		t.Fatalf("run: got nil error, want the run refused for a missing %s", config.EnvAgentKind)
+	}
+	if !strings.Contains(err.Error(), config.EnvAgentKind) {
+		t.Fatalf("run error = %q, want it to name %s", err.Error(), config.EnvAgentKind)
 	}
 
-	// One agent node, so exactly one start and one stop — and the stop must have arrived,
-	// which is what the command's flush is there to guarantee.
-	if got := sink.count(); got != 2 {
-		t.Fatalf("the sink received %d signals, want a start and a stop", got)
-	}
-	last := sink.last()
-	if last["generating"] != false {
-		t.Errorf("the last signal is %v, want the stop", last["generating"])
-	}
-	if last["node_id"] != "greet" {
-		t.Errorf("node_id = %v, want the agent node", last["node_id"])
+	// Refused at load means nothing ran: no node ever started, so no activity was reported.
+	if got := sink.count(); got != 0 {
+		t.Fatalf("the sink received %d signals, want none from a run that never started", got)
 	}
 }
 
