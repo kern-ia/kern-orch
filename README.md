@@ -71,8 +71,10 @@ go run . run examples/hello.yaml
 
 This runs a minimal example graph with no setup required — if no external AI CLI is
 configured, Kern-Orch uses a built-in stand-in so you can see the whole flow working end to
-end. To use a real AI provider for the agent steps, set the `KERN_AGENT_CLI` environment
-variable to point at that provider's command-line tool.
+end. To use a real AI provider for the agent steps, set `KERN_AGENT_CLI` to that provider's
+command-line tool and `KERN_AGENT_KIND` to which tool it is (`claude-code` or `opencode`) —
+the path alone does not say which protocol the binary speaks. Setting one without the other
+is refused at startup rather than guessed at.
 
 Other useful commands:
 
@@ -92,11 +94,14 @@ contracts, never internals.
 ### Consumed — provider CLI (`kern-link`)
 
 kern-orch never calls an LLM itself. Each `agent` node spawns the binary named by
-`KERN_AGENT_CLI` and speaks JSON-lines over its standard streams. Unset the variable and a
+`KERN_AGENT_CLI`, through the adapter that `KERN_AGENT_KIND` selects. Unset both and a
 deterministic stub takes over, so the harness runs with nothing configured.
 
-> **Status: provisional.** This protocol is specified in `internal/agentrunner/protocol.go`
-> and awaits reconciliation with the real CLI. Treat it as a draft, not a stable contract.
+> **Status: in migration.** The single JSON-lines protocol in
+> `internal/agentrunner/protocol.go` was a placeholder no real CLI ever spoke. It is being
+> replaced by one adapter per CLI behind `KERN_AGENT_KIND`; the `claude-code` and `opencode`
+> adapters are not built yet and currently refuse to start. Treat none of this as a stable
+> contract.
 
 kern-orch writes exactly one request object to the child's stdin, then closes it:
 
