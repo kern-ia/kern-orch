@@ -8,7 +8,7 @@ epic: 2
 issue: 05
 slug: opencode-adapter
 size: M
-status: pr-open
+status: done
 gh_issue: 39
 gh_pr: 46
 resource: https://github.com/kern-ia/kern-orch/issues/39
