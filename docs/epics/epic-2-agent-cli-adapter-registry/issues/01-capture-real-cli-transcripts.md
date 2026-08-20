@@ -3,13 +3,14 @@ type: Issue
 title: "Capture real Claude Code and OpenCode transcripts as test fixtures"
 description: "Record one real stream-json transcript from Claude Code and one real /message response from OpenCode, committed as fixtures - no translation logic is written against an assumed shape."
 tags: [epic-2]
-timestamp: 2026-08-20T14:43:18Z
+timestamp: 2026-08-20T14:50:00Z
 epic: 2
 issue: 01
 slug: capture-real-cli-transcripts
 size: S
-status: in-progress
+status: pr-open
 gh_issue: 35
+gh_pr: 42
 resource: https://github.com/kern-ia/kern-orch/issues/35
 depends_on: []
 ---
