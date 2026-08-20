@@ -44,3 +44,4 @@
 * **Update**: Epic 2 broken into 6 issues (#35-#40), created on milestone 2 and linked as native sub-issues of #33. The wrapper-script documentation item was filed separately as kern-exec#1, outside this epic’s implement-epic scope (different repository).
 * **Update**: Issue 01 (#35, PR #42) merged into `dev`; issue closed. (Reconciled during issue 02's run — the frontmatter and index bullet still recorded pr-open after merge.)
 * **Update**: Issue 02 (#36, adapter registry and KERN_AGENT_KIND selection) started on `feature/adapter-registry-and-kind-selection`.
+* **Update**: Issue 02 (#36, adapter registry and KERN_AGENT_KIND selection) implemented on `feature/adapter-registry-and-kind-selection`; PR #44 open against `dev`. No kind selects the old `Subprocess` JSON-lines placeholder any more, so `TestRunBracketsAgentActivity` was repurposed to assert the new loud refusal; the activity chain's end-to-end coverage returns with the first real adapter (issue 04).

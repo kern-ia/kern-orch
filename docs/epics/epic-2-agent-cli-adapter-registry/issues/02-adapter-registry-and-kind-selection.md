@@ -3,13 +3,14 @@ type: Issue
 title: "Add the adapter registry and KERN_AGENT_KIND selection"
 description: "A registry type in internal/agentrunner selecting between adapters by KERN_AGENT_KIND, with config.FromEnv() failing loud on a missing or invalid value."
 tags: [epic-2]
-timestamp: 2026-08-20T15:10:00Z
+timestamp: 2026-08-20T17:05:00Z
 epic: 2
 issue: 02
 slug: adapter-registry-and-kind-selection
 size: M
-status: in-progress
+status: pr-open
 gh_issue: 36
+gh_pr: 44
 resource: https://github.com/kern-ia/kern-orch/issues/36
 depends_on: []
 ---
