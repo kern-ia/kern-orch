@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/yoann/kern-orch/internal/agentrunner"
 	"github.com/yoann/kern-orch/internal/checkpoint"
 	"github.com/yoann/kern-orch/internal/config"
 	"github.com/yoann/kern-orch/internal/daemon"
@@ -42,6 +43,11 @@ type preparedRun struct {
 	reporter         *report.HTTPReporter
 	activity         *activityRelay
 	activityReporter *report.ActivityReporter
+	// runner is the agent adapter backing this run's agent nodes, kept here for one
+	// reason: an adapter may own a process that has to be started once for the whole run
+	// (agentrunner.Lifecycle). The graph itself holds it too, but only per node and with
+	// no way to ask the question — see run's lifecycle block.
+	runner graph.AgentRunner
 	// equivalenceCheck carries cfg.RuntimeEquivalenceCheck (issue 13) through to run, which
 	// is where the hook chain is built. It is a bool rather than the whole Config so that
 	// run's signature keeps naming only what it uses.
@@ -85,7 +91,7 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 
 	return &preparedRun{
 		graph: g, graphPath: graphPath, name: name, requester: requester, dossier: dossier, mailbox: mailbox,
-		reporter: reporter, activity: activity, activityReporter: activityReporter,
+		reporter: reporter, activity: activity, activityReporter: activityReporter, runner: runner,
 		equivalenceCheck: cfg.RuntimeEquivalenceCheck,
 	}, nil
 }
@@ -102,6 +108,17 @@ func prepareRun(cfg config.Config, runID, graphPath, requester, dossier string, 
 func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, runID string, resume *checkpoint.ResumePoint) error {
 	defer p.reporter.Flush()
 	defer p.activityReporter.Flush()
+
+	if err := p.startAdapter(ctx); err != nil {
+		return err
+	}
+	// One defer here covers all three exit paths, and that is a property of the call
+	// graph rather than an assumption: run is the single choke point every caller goes
+	// through (the CLI's `run`/`resume`, StartRun, ResumeRun, Dispatch), and a stop is not
+	// a separate path at all — StopRun cancels the run's context through the mailbox, the
+	// engine's level loop returns ctx.Err(), and control comes back here exactly as a
+	// failure would.
+	defer p.closeAdapter()
 
 	// Built before the engine, and a failure here stops the run before it starts: the
 	// recorder reads where this run's journal left off, and a run that cannot know its own
@@ -153,6 +170,39 @@ func (p *preparedRun) run(ctx context.Context, store *checkpoint.SQLiteStore, ru
 		p.reporter.ReportFailure(ctx, runID, p.name, steps.last, steps.frontier, failedNodes(err), err.Error())
 	}
 	return err
+}
+
+// startAdapter starts this run's agent adapter when it declares a lifecycle, and does
+// nothing at all otherwise — an adapter with no long-lived resource (Stub, Subprocess,
+// which spawns its child per call by design) never sees a new call.
+//
+// A start failure is fatal to the run: an adapter that could not come up would fail every
+// agent node one by one, and half a graph executed against a dead adapter is worse than a
+// run that never began. The concrete type is named because the message a human reads must
+// say *which* adapter refused to start, not that "the adapter" did.
+func (p *preparedRun) startAdapter(ctx context.Context) error {
+	lc, ok := p.runner.(agentrunner.Lifecycle)
+	if !ok {
+		return nil
+	}
+	if err := lc.Start(ctx); err != nil {
+		return fmt.Errorf("serve: start agent adapter %T: %w", p.runner, err)
+	}
+	return nil
+}
+
+// closeAdapter releases what startAdapter acquired. A failure is logged and dropped, never
+// returned: the same best-effort-on-the-way-out posture as the reporter's Flush and the
+// checkpoint store's Close. A run whose every node succeeded did succeed, and turning an
+// adapter that would not shut down into a failed run would lose that result for good.
+func (p *preparedRun) closeAdapter() {
+	lc, ok := p.runner.(agentrunner.Lifecycle)
+	if !ok {
+		return
+	}
+	if err := lc.Close(); err != nil {
+		slog.Warn("kern-orch: close agent adapter", "adapter", fmt.Sprintf("%T", p.runner), "error", err)
+	}
 }
 
 // daemonRunner implements daemon.Runner using exactly the engine wiring the CLI's `run` and
@@ -527,7 +577,7 @@ func prepareAdhocRun(cfg config.Config, runID, skillName, prompt, requester, dos
 
 	return &preparedRun{
 		graph: g, graphPath: "", name: skillName, requester: requester, dossier: dossier, mailbox: mailbox,
-		reporter: reporter, activity: activity, activityReporter: activityReporter,
+		reporter: reporter, activity: activity, activityReporter: activityReporter, runner: runner,
 		equivalenceCheck: cfg.RuntimeEquivalenceCheck,
 	}, nil
 }
