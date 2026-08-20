@@ -17,7 +17,7 @@ type Options struct {
 	// TokenSink receives the incremental token stream; nil discards it.
 	TokenSink io.Writer
 	// OnActivity brackets the window during which the model is working on a node. See
-	// Subprocess.OnActivity for the contract every adapter honours.
+	// ClaudeCode.OnActivity for the contract every adapter honours.
 	OnActivity func(nodeID string, generating bool, message string)
 }
 
@@ -28,11 +28,9 @@ type constructor func(cfg config.Config, opts Options) (graph.AgentRunner, error
 
 // adapters maps a config.AgentKind* value to the adapter that speaks that CLI's protocol.
 //
-// A kind with no adapter yet returns an error naming it rather than falling back to Stub:
-// a stub answering a run that asked for a real CLI produces plausible canned output, and a
-// failure that looks like a success is worse here than no run at all.
+// Every kind maps to a real adapter now that issues 04 and 05 have both landed.
 var adapters = map[string]constructor{
-	config.AgentKindClaudeCode: notImplemented(config.AgentKindClaudeCode),
+	config.AgentKindClaudeCode: newClaudeCode,
 	config.AgentKindOpenCode:   newOpenCode,
 }
 
@@ -45,12 +43,6 @@ func newOpenCode(cfg config.Config, opts Options) (graph.AgentRunner, error) {
 		TokenSink:  opts.TokenSink,
 		OnActivity: opts.OnActivity,
 	}, nil
-}
-
-func notImplemented(kind string) constructor {
-	return func(config.Config, Options) (graph.AgentRunner, error) {
-		return nil, fmt.Errorf("agentrunner: the %q adapter is not implemented yet", kind)
-	}
 }
 
 // New selects the AgentRunner for cfg. No AgentCLI configured is the harness's LLM-less mode

@@ -6,11 +6,11 @@ import "context"
 // that outlives a single node — a server process, a pooled connection, a session — declares
 // it here, and the run's setup/teardown honours it.
 //
-// It is deliberately NOT folded into graph.AgentRunner. Subprocess and Stub have nothing to
-// start or stop: Subprocess spawns its child inside Run, which is exactly right for a
-// one-shot CLI, and Stub answers from a map. Widening the port every graph depends on would
-// force both of them (and every future one-shot adapter) to carry no-op methods to satisfy
-// a need neither has. Callers type-assert instead:
+// It is deliberately NOT folded into graph.AgentRunner. Stub answers from a map and has
+// nothing to start or stop; ClaudeCode spawns its child inside Run, which is exactly right
+// for a one-shot CLI, and declares a no-op pair only so the call site reads one way for every
+// adapter. Widening the port every graph depends on would force that on Stub and on every
+// future test double too, to satisfy a need they do not have. Callers type-assert instead:
 //
 //	if lc, ok := runner.(agentrunner.Lifecycle); ok { ... }
 //

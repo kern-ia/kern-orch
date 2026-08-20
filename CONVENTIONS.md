@@ -68,8 +68,9 @@ author is enough.
 - One-way dependencies: `graph` defines the ports (`AgentRunner`, `StepFunc`); `agentrunner`
   and `checkpoint` depend on `graph`, never the reverse. Any PR that reverses this direction
   must justify it explicitly in its description.
-- `agentrunner`'s JSON-lines protocol is an accepted placeholder (spec §6.4) — do not harden
-  it into a stable API without revisiting the spec.
+- `agentrunner` speaks each agent CLI's own real protocol, one adapter per `KERN_AGENT_KIND`
+  (spec §6.4). Every adapter is asserted against a verbatim CLI capture under `testdata/`;
+  do not translate a field no captured transcript shows.
 
 ## Documentation
 
