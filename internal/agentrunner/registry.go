@@ -28,14 +28,23 @@ type constructor func(cfg config.Config, opts Options) (graph.AgentRunner, error
 
 // adapters maps a config.AgentKind* value to the adapter that speaks that CLI's protocol.
 //
-// Both entries are placeholders: issue 02 builds the registry and the selection, issues 04
-// and 05 build the adapters themselves. They return an error naming the missing adapter
-// rather than falling back to Stub, because a stub answering a run that asked for a real CLI
-// produces plausible canned output — a failure that looks like a success is worse here than
-// no run at all.
+// A kind with no adapter yet returns an error naming it rather than falling back to Stub:
+// a stub answering a run that asked for a real CLI produces plausible canned output, and a
+// failure that looks like a success is worse here than no run at all.
 var adapters = map[string]constructor{
 	config.AgentKindClaudeCode: notImplemented(config.AgentKindClaudeCode),
-	config.AgentKindOpenCode:   notImplemented(config.AgentKindOpenCode),
+	config.AgentKindOpenCode:   newOpenCode,
+}
+
+// newOpenCode builds the HTTP-backed OpenCode adapter. It also satisfies Lifecycle, which is
+// what makes serve.go start its server once for the whole run instead of per node.
+func newOpenCode(cfg config.Config, opts Options) (graph.AgentRunner, error) {
+	return &OpenCode{
+		Path:       cfg.AgentCLI,
+		Stderr:     opts.Stderr,
+		TokenSink:  opts.TokenSink,
+		OnActivity: opts.OnActivity,
+	}, nil
 }
 
 func notImplemented(kind string) constructor {

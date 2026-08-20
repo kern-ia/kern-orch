@@ -30,10 +30,10 @@ func TestNewReturnsTheStubWhenOnlyTheAgentKindIsConfigured(t *testing.T) {
 	}
 }
 
-// Issues 04 and 05 replace these two branches with real adapters. Until then the registry
-// must fail loud and name the adapter that is missing — the one behaviour that proves the
-// dispatch is wired at all, and the one that must never silently degrade to the stub: a run
-// that quietly answers with canned stub output looks like it worked.
+// A kind whose adapter is still a placeholder must fail loud and name it — the one behaviour
+// that proves the dispatch is wired at all, and the one that must never silently degrade to
+// the stub: a run that quietly answers with canned stub output looks like it worked. The
+// opencode kind has left this state; see TestNewBuildsTheOpenCodeAdapter.
 func TestNewReportsTheClaudeCodeAdapterAsNotYetImplemented(t *testing.T) {
 	_, err := New(config.Config{AgentCLI: "/usr/local/bin/claude", AgentKind: config.AgentKindClaudeCode}, Options{})
 	if err == nil {
@@ -41,16 +41,6 @@ func TestNewReportsTheClaudeCodeAdapterAsNotYetImplemented(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), config.AgentKindClaudeCode) {
 		t.Fatalf("New error = %q, want it to name %s", err.Error(), config.AgentKindClaudeCode)
-	}
-}
-
-func TestNewReportsTheOpenCodeAdapterAsNotYetImplemented(t *testing.T) {
-	_, err := New(config.Config{AgentCLI: "/usr/local/bin/opencode", AgentKind: config.AgentKindOpenCode}, Options{})
-	if err == nil {
-		t.Fatalf("New: got nil error, want one naming the %s adapter", config.AgentKindOpenCode)
-	}
-	if !strings.Contains(err.Error(), config.AgentKindOpenCode) {
-		t.Fatalf("New error = %q, want it to name %s", err.Error(), config.AgentKindOpenCode)
 	}
 }
 
