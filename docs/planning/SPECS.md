@@ -5,8 +5,8 @@ description: "A pure-Go agentic harness that executes an explicit graph of tool,
 tags: [planning, specs]
 timestamp: 2026-08-19T09:16:15Z
 status: final
-mapped_commit: 85d3f0af6227f855a76b887cfb05d44f9dd72056
-mapped_at: 2026-08-19T09:16:15Z
+mapped_commit: d6501edd59d380a8de73e6932ba7303f7ffbba7a
+mapped_at: 2026-08-20T09:30:00Z
 ---
 
 # kern-orch — Technical Specs
@@ -109,16 +109,29 @@ branch and merging on a single goroutine.
 
 ## Data model & storage
 
-One SQLite database, one table.
+**Refreshed 2026-08-20 (was written pre-epic-1; the persistence model below replaces a
+per-level state snapshot that was previously the source of truth).**
+
+One SQLite database, versioned (`schema_meta`, `SchemaVersion = 2`; an unknown stored
+version is refused outright, naming the file path — no migration, older or newer both
+refused), holding two tables that together implement event sourcing:
 
 ```sql
+CREATE TABLE IF NOT EXISTS events (
+    run_id TEXT    NOT NULL,
+    seq    INTEGER NOT NULL,
+    at     TEXT    NOT NULL,
+    event  TEXT    NOT NULL,       -- JSON of one journal.Event
+    PRIMARY KEY (run_id, seq)
+);
+
 CREATE TABLE IF NOT EXISTS checkpoints (
     run_id     TEXT    NOT NULL,
     step       INTEGER NOT NULL,
-    frontier   TEXT    NOT NULL,   -- JSON array of node ids still to execute
-    state      TEXT    NOT NULL,   -- JSON of graph.State (step, frozen, data, zones)
+    frontier   TEXT    NOT NULL,
+    state      TEXT    NOT NULL,   -- JSON of graph.State, PROJECTED from events, never live
     status     TEXT    NOT NULL,   -- queued | running | done | failed
-    created_at TEXT    NOT NULL,   -- RFC3339Nano
+    created_at TEXT    NOT NULL,
     graph_path TEXT    NOT NULL DEFAULT '',
     requester  TEXT    NOT NULL DEFAULT '',
     dossier    TEXT    NOT NULL DEFAULT '',
@@ -126,21 +139,54 @@ CREATE TABLE IF NOT EXISTS checkpoints (
 );
 ```
 
-**The durable truth of a run is a state snapshot per level, not a stream of facts.** `Save`
-upserts on `(run_id, step)`; `Latest` reads the highest step for a run; `List` rolls up one
-summary per run from each run's highest step. A `queued` marker is written at the reserved
-step `-1` — negative so that `MAX(step)` picks the real checkpoint the instant one lands.
+**The journal (`events`) is the source of truth; `checkpoints` is a materialized
+projection, written in the same transaction as the events of its level, never
+independently — its state comes from `internal/journal/projection.Project`, never from
+marshalling the live `*graph.State`.** `internal/journal` declares its own vocabulary,
+deliberately distinct from the `kern.step-event` wire contract (see Interfaces below): run
+lifecycle, level boundaries (carrying which combination rule closed the level — `replace` or
+`merge`), per-node facts, and out-of-band mutations (`NudgeApplied` naming its origin,
+`FreezeApplied` carrying what was kept and what was dropped as independent fields, never a
+delta). `internal/graph` emits through its own `EventFunc` port (`graph.Event`), importing
+nothing from `internal/journal` — the adapter lives in `internal/cmd/journal_recorder.go` —
+so the one-way dependency direction (`graph` ← infrastructure) survives the addition.
+
+`Append` enforces the run's sequence rather than assigning it: a batch must start exactly at
+the stored next-seq and be internally contiguous, or the whole batch is refused. A `queued`
+marker is written at the reserved step `-1` on the `checkpoints` row, unrelated to the
+journal.
+
+**`resume` reads the journal and replays it — it never trusts the cached `checkpoints`
+row's state**, which exists as a fast path and may be stale; corrupting it does not change
+what resume reconstructs. A run whose journal has no events at all is refused
+(`checkpoint.ErrNoJournal`) rather than resumed from an empty state. A journal with no
+terminal event — a hard kill mid-level, or a stop whose own terminal write was refused on
+the run's already-cancelled context — is closed by resume before replay: a `NodeFailed` per
+unresolved node plus a `RunInterrupted`, each flagged `Synthetic` on the envelope so a
+reader can tell a reconstructed event from an observed one. No synthetic `LevelClosed` is
+ever written — the open level is exactly what resume restarts from, and closing it would
+fold partial branches into a state the run never held. A journal already ending on a
+terminal event is left byte-identical.
+
+A nested subgraph run gets its own journal, linked by parent run id and node id — the same
+shape `internal/report`'s `Parent` field already used for reporting nested runs, extended to
+the durable record for the same reason: one monotonic sequence per run, composable at any
+depth without a recursive schema.
 
 Operational details that constrain any change here:
 
 - The connection pool is pinned to a single connection (`SetMaxOpenConns(1)`) so that
   `PRAGMA busy_timeout=5000` actually applies to every access rather than to whichever
-  connection came first. Concurrent access is real: the steering endpoints read the latest
-  checkpoint for a requester check while the run's own goroutine may be writing one.
-- **There is no migration mechanism.** A single ad-hoc `ALTER TABLE ... ADD COLUMN dossier`
-  runs on every open with its error deliberately ignored, since the only failure mode against
-  this fixed schema is "column already exists". Any schema change beyond an additive nullable
-  column has nothing to build on today.
+  connection came first. Concurrent access is real and now doubly so: the steering endpoints
+  read the latest checkpoint for a requester check, and a live run's goroutine both appends
+  events and upserts the projection, in one transaction, while it runs.
+- **A monotonic schema version now exists** (`internal/checkpoint`, `SchemaVersion`), so a
+  future schema change has something to build on rather than a second ad-hoc `ALTER TABLE`.
+  It still does not migrate — a version mismatch is refused, never reinterpreted.
+- **An opt-in runtime replay-equivalence check** (`Config.RuntimeEquivalenceCheck`, env
+  `KERN_RUNTIME_EQUIVALENCE_CHECK`, off by default) compares the projection against a fresh
+  replay at level boundaries and fails loud naming the divergent keys — a diagnostic for a
+  suspect run, not free by default since it doubles per-level projection cost.
 
 Two other stores are directories, not databases: skills under `KERN_SKILLS_DIR` (default
 `skills`) and created skills under `KERN_SKILLS_CUSTOM_DIR` (default `skills-custom`),
