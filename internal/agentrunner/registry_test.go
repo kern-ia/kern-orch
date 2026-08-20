@@ -1,6 +1,7 @@
 package agentrunner
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -30,20 +31,34 @@ func TestNewReturnsTheStubWhenOnlyTheAgentKindIsConfigured(t *testing.T) {
 	}
 }
 
-// Issues 04 and 05 replace these two branches with real adapters. Until then the registry
-// must fail loud and name the adapter that is missing — the one behaviour that proves the
-// dispatch is wired at all, and the one that must never silently degrade to the stub: a run
-// that quietly answers with canned stub output looks like it worked.
-func TestNewReportsTheClaudeCodeAdapterAsNotYetImplemented(t *testing.T) {
-	_, err := New(config.Config{AgentCLI: "/usr/local/bin/claude", AgentKind: config.AgentKindClaudeCode}, Options{})
-	if err == nil {
-		t.Fatalf("New: got nil error, want one naming the %s adapter", config.AgentKindClaudeCode)
+// The claude-code kind now dispatches to the real adapter, wired with the caller's streams
+// and hook — the registry is the only place that knows a kind maps to a concrete type, so it
+// is the only place that can prove it.
+func TestNewReturnsTheClaudeCodeAdapterForItsKind(t *testing.T) {
+	var sink bytes.Buffer
+	r, err := New(
+		config.Config{AgentCLI: "/usr/local/bin/claude", AgentKind: config.AgentKindClaudeCode},
+		Options{TokenSink: &sink},
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	if !strings.Contains(err.Error(), config.AgentKindClaudeCode) {
-		t.Fatalf("New error = %q, want it to name %s", err.Error(), config.AgentKindClaudeCode)
+	cc, ok := r.(*ClaudeCode)
+	if !ok {
+		t.Fatalf("New returned %T, want *ClaudeCode", r)
+	}
+	if cc.Path != "/usr/local/bin/claude" {
+		t.Errorf("Path = %q, want the configured AgentCLI", cc.Path)
+	}
+	if cc.TokenSink != &sink {
+		t.Error("the caller's TokenSink did not reach the adapter")
 	}
 }
 
+// Issue 05 replaces this branch with the real adapter. Until then the registry must fail loud
+// and name the adapter that is missing — the one behaviour that proves the dispatch is wired
+// at all, and the one that must never silently degrade to the stub: a run that quietly
+// answers with canned stub output looks like it worked.
 func TestNewReportsTheOpenCodeAdapterAsNotYetImplemented(t *testing.T) {
 	_, err := New(config.Config{AgentCLI: "/usr/local/bin/opencode", AgentKind: config.AgentKindOpenCode}, Options{})
 	if err == nil {

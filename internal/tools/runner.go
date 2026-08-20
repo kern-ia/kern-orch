@@ -13,7 +13,7 @@ import (
 )
 
 // Runner invokes a tool skill's declared command in a subprocess, mirroring
-// agentrunner.Subprocess's shape but for a single request/response call rather than a
+// agentrunner.ClaudeCode's shape but for a single request/response call rather than a
 // streamed one — a tool answers once, it does not narrate.
 type Runner struct {
 	Env    []string  // child environment (nil => inherit parent)

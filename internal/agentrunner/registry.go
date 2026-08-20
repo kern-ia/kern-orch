@@ -17,7 +17,7 @@ type Options struct {
 	// TokenSink receives the incremental token stream; nil discards it.
 	TokenSink io.Writer
 	// OnActivity brackets the window during which the model is working on a node. See
-	// Subprocess.OnActivity for the contract every adapter honours.
+	// ClaudeCode.OnActivity for the contract every adapter honours.
 	OnActivity func(nodeID string, generating bool, message string)
 }
 
@@ -28,13 +28,12 @@ type constructor func(cfg config.Config, opts Options) (graph.AgentRunner, error
 
 // adapters maps a config.AgentKind* value to the adapter that speaks that CLI's protocol.
 //
-// Both entries are placeholders: issue 02 builds the registry and the selection, issues 04
-// and 05 build the adapters themselves. They return an error naming the missing adapter
-// rather than falling back to Stub, because a stub answering a run that asked for a real CLI
-// produces plausible canned output — a failure that looks like a success is worse here than
-// no run at all.
+// The opencode entry is still a placeholder (issue 05). A placeholder returns an error naming
+// the missing adapter rather than falling back to Stub, because a stub answering a run that
+// asked for a real CLI produces plausible canned output — a failure that looks like a success
+// is worse here than no run at all.
 var adapters = map[string]constructor{
-	config.AgentKindClaudeCode: notImplemented(config.AgentKindClaudeCode),
+	config.AgentKindClaudeCode: newClaudeCode,
 	config.AgentKindOpenCode:   notImplemented(config.AgentKindOpenCode),
 }
 
