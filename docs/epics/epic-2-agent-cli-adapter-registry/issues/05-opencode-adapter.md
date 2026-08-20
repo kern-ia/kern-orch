@@ -3,12 +3,12 @@ type: Issue
 title: "Implement the OpenCode adapter: spawn, session, and wire translation"
 description: "An HTTP-backed adapter that spawns and owns an opencode serve process via the Start/Close lifecycle, and translates its real POST /session/:id/message response into AgentResult."
 tags: [epic-2]
-timestamp: 2026-08-20T11:30:00Z
+timestamp: 2026-08-20T14:00:00Z
 epic: 2
 issue: 05
 slug: opencode-adapter
 size: M
-status: open
+status: in-progress
 gh_issue: 39
 resource: https://github.com/kern-ia/kern-orch/issues/39
 depends_on: [1, 2, 3]
