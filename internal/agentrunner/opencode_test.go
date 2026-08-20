@@ -387,7 +387,7 @@ func TestRealOpenCodeRoundTrip(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real round trip is not a short test")
 	}
-	path, err := exec.LookPath(os.Getenv(EnvCLIPath))
+	path, err := exec.LookPath(os.Getenv(config.EnvAgentCLI))
 	if err != nil {
 		if path, err = exec.LookPath("opencode"); err != nil {
 			t.Skip("no opencode binary on PATH")
@@ -421,9 +421,4 @@ func TestRealOpenCodeRoundTrip(t *testing.T) {
 	}
 }
 
-func boolText(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
+// boolText lives in claudecode_test.go — shared, same package.
